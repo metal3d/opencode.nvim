@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/nickjvandyke/opencode.nvim/compare/v1.0.1...v1.0.2) (2026-09-14)
+
+
+### Bug Fixes
+
+* **windows:** error when discovering servers ([#327](https://github.com/nickjvandyke/opencode.nvim/issues/327)) ([618c91a](https://github.com/nickjvandyke/opencode.nvim/commit/618c91ad5fe2fe3761108205c3d793a5aae0d76f))
+
 ## [1.0.1](https://github.com/nickjvandyke/opencode.nvim/compare/v1.0.0...v1.0.1) (2026-09-11)
 
 
