@@ -23,6 +23,29 @@ local function buffer_text(buf, from, to)
   return table.concat(vim.api.nvim_buf_get_lines(buf, start_line - 1, end_line, false), "\n")
 end
 
+--- Make `path` relative to the working directory.
+---
+--- Also matches through symlinks: the buffer path and the working directory may
+--- reach the same file through different symbolic links (`/link/proj` vs
+--- `/mnt/proj`), which would otherwise yield an absolute reference.
+---@param path string
+---@return string
+local function relative_to_cwd(path)
+  local base = vim.fn.fnamemodify(rel_base(), ":p"):gsub("/$", "")
+  local abs = vim.fn.fnamemodify(path, ":p")
+  local candidates = {
+    { abs, base },
+    { vim.fn.resolve(abs), vim.fn.resolve(base) },
+  }
+  for _, pair in ipairs(candidates) do
+    local p, b = pair[1], pair[2]
+    if p:sub(1, #b + 1) == b .. "/" then
+      return p:sub(#b + 2)
+    end
+  end
+  return abs
+end
+
 --- Format a location the way OpenCode expects.
 ---@param opts { path?: string, buf?: integer, from?: integer[], to?: integer[] }
 ---@return string? # Reference, or inline text for non-file buffers, or nil.
@@ -37,17 +60,17 @@ function M.format(opts)
     from, to = to, from
   end
 
-  -- Buffers without a real backing file: fall back to inline text.
+  -- A buffer whose backing file is gone: fall back to inline text when we have
+  -- a buffer to read from (a bare `path` with no buffer yields nothing).
   local stat = vim.uv.fs_stat(path)
   if not stat or stat.type ~= "file" then
+    if not opts.buf then
+      return nil
+    end
     return buffer_text(opts.buf, from or { 1 }, to or { vim.api.nvim_buf_line_count(opts.buf) })
   end
 
-  local result = vim.fn.fnamemodify(path, ":p")
-  local base = rel_base():gsub("/$", "") .. "/"
-  if result:find(base, 1, true) == 1 then
-    result = result:sub(#base + 1)
-  end
+  local result = relative_to_cwd(path)
 
   if from then
     result = result .. ":L" .. from[1]
@@ -213,23 +236,64 @@ local handlers = {
   diagnostics = M.diagnostics,
 }
 
---- Expand `@placeholder` occurrences in `prompt` into references.
+--- Placeholder names, longest first so `@buffers` is never shadowed by
+--- `@buffer`. Computed once at load time.
+local names = {}
+for name in pairs(handlers) do
+  names[#names + 1] = name
+end
+table.sort(names, function(a, b)
+  return #a > #b
+end)
+
+--- Match a placeholder name starting at `at`, requiring a word boundary after
+--- the token (so `@buffers` is not read as `@buffer` followed by `s`).
 ---@param prompt string
----@return string
-function M.render(prompt)
-  local out = prompt
-  for name, fn in pairs(handlers) do
-    local token = "@" .. name
-    if out:find(token, 1, true) then
-      local value = fn()
-      if value then
-        out = out:gsub(token, value)
-      else
-        out = out:gsub(token, "")
+---@param at integer Byte index of the `@`.
+---@return string? name
+local function match_name(prompt, at)
+  for _, name in ipairs(names) do
+    local stop = at + #name + 1
+    if prompt:sub(at, stop - 1) == "@" .. name then
+      local after = prompt:sub(stop, stop)
+      if after == "" or not after:match("%w") then
+        return name
       end
     end
   end
-  return vim.trim(out)
+  return nil
+end
+
+--- Expand `@placeholder` occurrences in `prompt` into references.
+---
+--- Single left-to-right pass: inserted values are never rescanned (so a value
+--- containing `@name` is left intact), and the replacement is built with plain
+--- concatenation rather than `string.gsub`, so a `%` in a value (e.g. a
+--- diagnostic message like "100% done") is preserved verbatim.
+---@param prompt string
+---@return string
+function M.render(prompt)
+  local out = {}
+  local pos = 1
+  local n = #prompt
+  while pos <= n do
+    local at = prompt:find("@", pos, true)
+    if not at then
+      out[#out + 1] = prompt:sub(pos)
+      break
+    end
+    local name = match_name(prompt, at)
+    if name then
+      out[#out + 1] = prompt:sub(pos, at - 1)
+      out[#out + 1] = handlers[name]() or ""
+      pos = at + #name + 1
+    else
+      -- Not a known placeholder: keep the `@` and resume after it.
+      out[#out + 1] = prompt:sub(pos, at)
+      pos = at + 1
+    end
+  end
+  return vim.trim(table.concat(out))
 end
 
 return M

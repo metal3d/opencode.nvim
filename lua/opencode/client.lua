@@ -12,7 +12,13 @@ M.server = nil
 ---@type boolean
 M.tui = false
 
----@param srv table
+--- Timeouts (in seconds) for non-streaming requests. They keep a dead or
+--- unreachable server from leaving a caller waiting forever (which, before
+--- connection state was fixed, could lock out every later attempt).
+M.connect_timeout = 5
+M.max_time = 60
+
+---@param srv table? # nil clears the connected server.
 function M.set_server(srv)
   M.server = srv
 end
@@ -34,7 +40,10 @@ function M.detect_tui(cb)
       return
     end
     local ok, spec = pcall(vim.json.decode, res.body or "")
-    local has = ok and type(spec) == "table" and type(spec.paths) == "table" and spec.paths["/tui/execute-command"] ~= nil
+    local has = ok
+      and type(spec) == "table"
+      and type(spec.paths) == "table"
+      and spec.paths["/tui/execute-command"] ~= nil
     M.tui = has and true or false
     cb(M.tui)
   end)
@@ -49,17 +58,31 @@ end
 --- Perform a request and give `cb` the raw body (or an error).
 ---@param method string HTTP method.
 ---@param path string API path beginning with `/`.
----@param opts? { body?: string, headers?: string[], extra?: string[] }
----@param cb fun(result: { body?: string, err?: string })
+---@param opts? { body?: string, headers?: string[], extra?: string[], server?: { url: string, username?: string, password: string } }
+---@param cb fun(result: { body?: string, err?: string, status?: integer })
 function M.request(method, path, opts, cb)
   opts = opts or {}
-  local server = M.server
+  -- `opts.server` lets callers probe a candidate server without committing it
+  -- to the shared client (used during connection validation).
+  local server = opts.server or M.server
   if not server then
     cb({ err = "No OpenCode server connected" })
     return
   end
 
-  local args = { "curl", "-sS", "--fail-with-body", "-X", method }
+  local args = {
+    "curl",
+    "-sS",
+    "--fail-with-body",
+    "--connect-timeout",
+    tostring(M.connect_timeout),
+    "--max-time",
+    tostring(M.max_time),
+    "-w",
+    "\n%{http_code}",
+    "-X",
+    method,
+  }
   local a = auth_args(server)
   args[#args + 1] = a[1]
   args[#args + 1] = a[2]
@@ -84,15 +107,23 @@ function M.request(method, path, opts, cb)
     -- and buffer/window APIs are forbidden. Defer the result so callers can use
     -- the normal Neovim API freely.
     vim.schedule(function()
+      local out = obj.stdout or ""
+      -- curl `-w "\n%{http_code}"` appends the HTTP status as the last line.
+      local status = tonumber(out:match("\n(%d%d%d)%s*$"))
+      local body = out:gsub("\n%d%d%d%s*$", "")
       if obj.code ~= 0 then
         local detail = vim.trim(obj.stderr or "")
         if detail == "" then
-          detail = vim.trim(obj.stdout or "")
+          detail = vim.trim(body)
         end
-        cb({ err = "opencode request failed (" .. tostring(obj.code) .. "): " .. detail })
+        cb({
+          err = "opencode request failed (" .. tostring(obj.code) .. "): " .. detail,
+          body = body,
+          status = status,
+        })
         return
       end
-      cb({ body = obj.stdout or "" })
+      cb({ body = body, status = status })
     end)
   end)
 end
@@ -101,19 +132,24 @@ end
 ---@param method string
 ---@param path string
 ---@param body? table Request payload; encoded as JSON when provided.
----@param cb fun(result: { data?: any, body?: string, err?: string })
-function M.api(method, path, body, cb)
-  M.request(method, path, { body = body ~= nil and vim.json.encode(body) or nil }, function(res)
+---@param cb fun(result: { data?: any, body?: string, err?: string, status?: integer })
+---@param server? { url: string, username?: string, password: string } Optional
+---  server to target instead of the shared client (connection validation).
+function M.api(method, path, body, cb, server)
+  M.request(method, path, {
+    body = body ~= nil and vim.json.encode(body) or nil,
+    server = server,
+  }, function(res)
     if res.err then
-      cb({ err = res.err })
+      cb({ err = res.err, body = res.body, status = res.status })
       return
     end
-    local ok, data = pcall(vim.json.decode, res.body or "null")
+    local ok, data = pcall(vim.json.decode, res.body or "null", { luanil = { object = true } })
     if not ok then
-      cb({ err = "invalid JSON from API" })
+      cb({ err = "invalid JSON from API", body = res.body, status = res.status })
       return
     end
-    cb({ data = data, body = res.body })
+    cb({ data = data, body = res.body, status = res.status })
   end)
 end
 
@@ -142,10 +178,11 @@ function M.stream(path, opts)
 
   return vim.system(args, {
     text = true,
-    stdout = function(chunk)
-      -- The streaming callback may be invoked with nil at end of stream.
-      if chunk and opts.on_data then
-        opts.on_data(chunk)
+    -- `vim.system` invokes the stdout callback as `(err, data)`; the final call
+    -- is `(nil, nil)` at end of stream.
+    stdout = function(_, data)
+      if data and opts.on_data then
+        opts.on_data(data)
       end
     end,
   }, function(obj)

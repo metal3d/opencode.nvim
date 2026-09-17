@@ -1,8 +1,9 @@
 --- Configuration management for opencode.nvim.
 ---
---- Users configure the plugin through the global `vim.g.opencode_opts` table.
---- Defaults are merged on first access so configuration work is deferred and
---- only happens when the plugin is actually used.
+--- Users configure the plugin through `require("opencode").setup(opts)`, which
+--- is what lazy.nvim calls automatically when a spec uses `opts = { ... }`.
+--- The legacy global `vim.g.opencode_opts` is still honoured, and takes
+--- precedence over the defaults but not over `setup(opts)`.
 ---@diagnostic disable-next-line
 local util = require("opencode.util")
 
@@ -28,7 +29,7 @@ local util = require("opencode.util")
 ---@field server opencode.server.Opts
 ---@field panel opencode.panel.Opts
 ---@field prompts table<string, string> Named prompt templates.
----@field keys table<string, function|string> User keymaps applied by `setup()`.
+---@field keys table<string, function|string>|"recommended" Keymaps applied by `setup()`.
 ---@field session opencode.session.Opts
 ---@field events opencode.events.Opts
 
@@ -85,12 +86,30 @@ local defaults = {
 local M = {}
 M.defaults = defaults
 M.opts = nil
+M.user = nil
+
+--- Store the options passed to `require("opencode").setup(opts)`.
+---
+--- Precedence on resolution is: defaults, then `vim.g.opencode_opts`, then
+--- these options. Passing `nil` clears any previously stored options.
+---@param opts opencode.Opts?
+function M.setup(opts)
+  M.user = opts
+  M.opts = nil
+end
 
 --- Resolve the effective options, merging user settings over the defaults.
+---
+--- The result is cached until `M.setup()` is called again, so this is cheap to
+--- call on every access.
 ---@return opencode.Opts
 function M.get()
   if not M.opts then
-    M.opts = util.merge(defaults, vim.g.opencode_opts or {})
+    local merged = util.merge(defaults, vim.g.opencode_opts or {})
+    if M.user then
+      merged = util.merge(merged, M.user)
+    end
+    M.opts = merged
   end
   return M.opts
 end

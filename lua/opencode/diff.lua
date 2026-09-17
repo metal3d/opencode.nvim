@@ -29,7 +29,7 @@ local function render_entry(entry)
   local lines = {}
   lines[#lines + 1] = "── " .. (entry.file or "?") .. "  (" .. (entry.status or "?") .. ")"
   if entry.additions or entry.deletions then
-    lines[#lines + 1] = ("+%d -%d"):format(entry.additions or 0, entry.deletions or 0)
+    lines[#lines + 1] = ("additions: %d, deletions: %d"):format(entry.additions or 0, entry.deletions or 0)
   end
   if entry.patch and entry.patch ~= "" then
     for line in (entry.patch .. "\n"):gmatch("(.-)\n") do

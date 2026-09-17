@@ -14,7 +14,7 @@ Thanks for taking an interest in opencode.nvim.
 ## Development
 
 ```bash
-# Type-check (requires lua-language-server and a Neovim runtime path)
+# Type-check the plugin (requires lua-language-server and a Neovim runtime path)
 lua-language-server --configpath .luarc.ci.json --check=.
 
 # Check formatting (requires stylua)
@@ -24,10 +24,32 @@ stylua --check .
 stylua .
 ```
 
+CI runs `stylua --check .` on every push and pull request (see
+`.github/workflows/lint.yml`).
+
+### Tests
+
+The suite uses [plenary.nvim](https://github.com/nvim-lua/plenary.nvim) as a
+test-only dependency and runs headless. Point `PLENARY` at a local clone:
+
+```bash
+make test PLENARY=~/.local/share/nvim/lazy/plenary.nvim
+
+# A single spec file
+make test-file FILE=tests/opencode/context_spec.lua PLENARY=~/.local/share/nvim/lazy/plenary.nvim
+```
+
+Specs live in `tests/opencode/*_spec.lua` and are run by
+`.github/workflows/test.yml` against Neovim 0.11, stable and nightly. Tests must
+not touch the network or a real OpenCode server: stub `client.api` (see
+`tests/opencode/session_spec.lua`) and drive `event.ingest` directly
+(`tests/opencode/event_spec.lua`).
+
 ## Project layout
 
 See the "Layout" section of [README.md](./README.md). Public behaviour lives in
-`lua/opencode/init.lua`; the panel and renderer are `panel.lua` and `render.lua`.
+`lua/opencode/init.lua`; the panel is `panel.lua` and prompt context is
+`context.lua`.
 
 ## Conventions
 

@@ -7,14 +7,23 @@
 -- Buffers edited by OpenCode reload automatically (unless the user explicitly
 -- opted out via `opts.events.reload = false`).
 local config_ok, config = pcall(require, "opencode.config")
-if config_ok and config.get().events.reload then
-  vim.opt.autoread = true
+if config_ok then
+  if config.get().events.reload then
+    vim.opt.autoread = true
+  end
 
   -- React to OpenCode's SSE file events when it emits them.
+  --
+  -- `opts.events.reload` may only be known once `setup()` runs (lazy.nvim calls
+  -- it after this file is sourced), so the option is checked at event time
+  -- rather than at load time.
   vim.api.nvim_create_autocmd("User", {
     group = vim.api.nvim_create_augroup("OpencodeReload", { clear = true }),
     pattern = { "OpencodeEvent:filesystem.changed", "OpencodeEvent:file.edited" },
     callback = function()
+      if not config.get().events.reload then
+        return
+      end
       -- Scheduled: blocking the event loop during rapid SSE influx can drop events.
       vim.schedule(function()
         vim.cmd("checktime")

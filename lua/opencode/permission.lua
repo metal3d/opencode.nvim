@@ -50,27 +50,38 @@ end
 
 --- Prompt the user to allow or deny a single request.
 ---@param request table
-function M.ask(request)
+---@param cb? fun(replied: boolean) Called once the request is handled (or the
+---  prompt is cancelled). `replied` is false when the user cancelled.
+function M.ask(request, cb)
+  cb = cb or function() end
   local action = request.action or "?"
   local resources = table.concat(request.resources or {}, ", ")
   local label = action .. (resources ~= "" and (": " .. resources) or "")
   vim.ui.select({ "once", "always", "reject" }, {
     prompt = "OpenCode permission: " .. label,
   }, function(choice)
-    if choice then
-      M.reply(request.id, choice, function(res)
-        if res.err then
-          vim.notify("opencode: " .. res.err, vim.log.levels.ERROR)
-        end
-      end)
+    if not choice then
+      cb(false)
+      return
     end
+    M.reply(request.id, choice, function(res)
+      if res.err then
+        vim.notify("opencode: " .. res.err, vim.log.levels.ERROR)
+      end
+      cb(true)
+    end)
   end)
 end
 
 --- Prompt for every currently pending permission request.
+---
+--- Requests are handled one at a time: `vim.ui.select` is modal, so asking them
+--- all at once would stack the prompts and leave only the last one answerable.
+--- Cancelling (Escape) stops the run.
 function M.prompt_pending()
   M.list(function(res)
     if res.err then
+      vim.notify("opencode: " .. res.err, vim.log.levels.ERROR)
       return
     end
     local items = res.data or {}
@@ -78,9 +89,18 @@ function M.prompt_pending()
       vim.notify("opencode: no pending permissions", vim.log.levels.INFO)
       return
     end
-    for _, req in ipairs(items) do
-      M.ask(req)
+    local function ask_next(index)
+      local request = items[index]
+      if not request then
+        return
+      end
+      M.ask(request, function(replied)
+        if replied then
+          ask_next(index + 1)
+        end
+      end)
     end
+    ask_next(1)
   end)
 end
 

@@ -18,7 +18,7 @@ local permission = require("opencode.permission")
 local diff = require("opencode.diff")
 local bindings = require("opencode.bindings")
 
-local state = { connected = false, connecting = false }
+local state = { connected = false, connecting = false, pending = {} }
 M.state = state
 
 local function notify(msg, level)
@@ -26,6 +26,11 @@ local function notify(msg, level)
 end
 
 --- Connect to an OpenCode server (discovery, auth and event subscription).
+---
+--- Concurrent calls are queued: while a connection attempt is in flight, extra
+--- callbacks are held and invoked with the same result once it resolves, so no
+--- caller is ever silently dropped. A failed attempt always clears the server,
+--- and a watchdog bounds the whole attempt.
 ---@param cb? fun(err?: string)
 function M.connect(cb)
   cb = cb or function() end
@@ -34,37 +39,82 @@ function M.connect(cb)
     return
   end
   if state.connecting then
+    state.pending[#state.pending + 1] = cb
     return
   end
   state.connecting = true
 
   local opts = config.get()
-  local finish = function(err, server)
-    state.connecting = false
-    if err then
-      cb(err)
+  local finished = false
+  local watchdog
+
+  local function flush(err)
+    if finished then
       return
     end
-    client.set_server(server)
-    state.connected = true
-    if opts.server.connect then
-      events.subscribe()
+    finished = true
+    if watchdog and not watchdog:is_closing() then
+      watchdog:stop()
+      watchdog:close()
     end
-    cb(nil)
+    state.connecting = false
+    if err then
+      -- Never keep a half-validated (or dead) server around.
+      client.set_server(nil)
+      client.tui = false
+      state.connected = false
+      events.unsubscribe()
+    end
+    local waiters = state.pending
+    state.pending = {}
+    cb(err)
+    for _, waiter in ipairs(waiters) do
+      waiter(err)
+    end
+  end
+
+  -- Bound the attempt so a hung discovery/curl can never lock out future calls.
+  watchdog = vim.uv.new_timer()
+  if watchdog then
+    watchdog:start(
+      30000,
+      0,
+      vim.schedule_wrap(function()
+        flush("connection to OpenCode timed out")
+      end)
+    )
   end
 
   local function validate(server)
-    client.set_server(server)
+    -- Probe the candidate explicitly: the shared client must stay unset until
+    -- the server has actually answered.
     client.api("GET", "/api/info", nil, function(res)
       if res.err then
-        finish(res.err)
-      else
-        -- Detect legacy TUI control so prompts can target the active tab.
-        client.detect_tui(function()
-          finish(nil, server)
-        end)
+        flush(res.err)
+        return
       end
-    end)
+      client.set_server(server)
+      state.connected = true
+      if opts.server.connect then
+        -- The service is shared, and its event feed is global: only react to
+        -- events belonging to this instance's directory.
+        events.filter = function(ev)
+          local loc = ev.location and ev.location.directory
+          return loc == nil or loc == vim.fn.getcwd()
+        end
+        events.subscribe()
+      end
+      -- The server is validated: the watchdog has done its job and must not
+      -- abort a healthy server while the (optional) TUI probe runs.
+      if watchdog and not watchdog:is_closing() then
+        watchdog:stop()
+        watchdog:close()
+      end
+      -- Detect legacy TUI control so prompts can target the active tab.
+      client.detect_tui(function()
+        flush(nil)
+      end)
+    end, server)
   end
 
   local function try_disco()
@@ -75,14 +125,14 @@ function M.connect(cb)
     end
     discovery.start(function(start_err)
       if start_err then
-        finish(start_err)
+        flush(start_err)
         return
       end
       local r2 = discovery.read_registration()
       if r2 then
         validate({ url = r2.url, password = r2.password, username = opts.server.username })
       else
-        finish("could not start the opencode service")
+        flush("could not start the opencode service")
       end
     end)
   end
@@ -91,7 +141,7 @@ function M.connect(cb)
     if opts.server.password then
       validate({ url = opts.server.url, password = opts.server.password, username = opts.server.username })
     else
-      finish("server.url is set but server.password is missing")
+      flush("server.url is set but server.password is missing")
     end
   else
     try_disco()
@@ -101,7 +151,8 @@ end
 --- Ensure a connected server and a targeted session, then run `cb`.
 ---@param cb fun(err?: string)
 function M.ensure(cb)
-  if client.connected() and session.get_target() then
+  local cwd = vim.fn.getcwd()
+  if client.connected() and session.matches(cwd) then
     cb(nil)
     return
   end
@@ -110,7 +161,7 @@ function M.ensure(cb)
       cb(err)
       return
     end
-    session.ensure(vim.fn.getcwd(), function(res)
+    session.ensure(cwd, function(res)
       if res.err then
         cb(res.err)
         return
@@ -181,8 +232,9 @@ end
 ---@param cb fun(result: { err?: string })
 local function deliver(text, cb)
   local spawned = panel.open()
-  local function go()
-    if panel.send(text) then
+  ---@param via_pty boolean Whether injecting into the TUI terminal is allowed.
+  local function go(via_pty)
+    if via_pty and panel.send(text) then
       cb({})
       return
     end
@@ -194,13 +246,21 @@ local function deliver(text, cb)
       cb(res.err and { err = res.err } or {})
     end)
   end
-  -- Give a freshly spawned TUI a moment to be ready for input.
   if spawned then
-    panel.wait_ready(function()
-      vim.defer_fn(go, 200)
+    -- Only inject into the terminal once we trust it is ready; otherwise fall
+    -- back to the API rather than typing into a half-drawn (or dead) TUI.
+    panel.wait_ready(function(ready)
+      if ready then
+        -- Give the freshly spawned TUI a moment to accept input.
+        vim.defer_fn(function()
+          go(true)
+        end, 200)
+      else
+        go(false)
+      end
     end)
   else
-    go()
+    go(true)
   end
 end
 
@@ -209,17 +269,20 @@ end
 ---@param cb? fun(result: { err?: string })
 function M.prompt(text, cb)
   cb = cb or function() end
+  ---@type fun(result: { err?: string })
+  local done = cb
   with_target(function(err)
     if err then
       notify(err)
-      cb({ err = err })
+      done({ err = err })
       return
     end
     deliver(context.render(text), function(res)
       if res.err then
         notify(res.err)
       end
-      cb(res)
+      ---@diagnostic disable-next-line: param-type-mismatch
+      done(res)
     end)
   end)
 end
@@ -324,55 +387,73 @@ end
 
 --- List sessions and switch the target (or create a new one).
 function M.session()
-  session.list(function(res)
-    if res.err then
-      notify(res.err)
+  M.ensure(function(err)
+    if err then
+      notify(err)
       return
     end
-    local items = { { id = "__new__", title = "+ New session" } }
-    for _, s in ipairs(res.data or {}) do
-      items[#items + 1] = s
-    end
-    vim.ui.select(items, {
-      prompt = "opencode: session",
-      format_item = function(s)
-        if s.id == "__new__" then
-          return s.title
-        end
-        local title = (s.title ~= nil and s.title ~= "") and s.title or s.id
-        local dir = (s.location or {}).directory or "?"
-        return title .. "  [" .. dir .. "]"
-      end,
-    }, function(choice)
-      if not choice then
+    session.list_all(function(res)
+      if res.err then
+        notify(res.err)
         return
       end
-      if choice.id == "__new__" then
-        session.create(vim.fn.getcwd(), function(r)
-          if r.err then
-            notify(r.err)
-            return
-          end
-          panel.restart()
-          notify("new session: " .. tostring(session.get_target()), vim.log.levels.INFO)
-        end)
-      else
-        session.set_target(choice.id)
-        panel.restart()
-        notify("switched to " .. choice.id, vim.log.levels.INFO)
+      local items = { { id = "__new__", title = "+ New session" } }
+      for _, s in ipairs(res.data or {}) do
+        items[#items + 1] = s
       end
+      vim.ui.select(items, {
+        prompt = "opencode: session",
+        format_item = function(s)
+          if s.id == "__new__" then
+            return s.title
+          end
+          local title = (s.title ~= nil and s.title ~= "") and s.title or s.id
+          local dir = (s.location or {}).directory or "?"
+          return title .. "  [" .. dir .. "]"
+        end,
+      }, function(choice)
+        if not choice then
+          return
+        end
+        if choice.id == "__new__" then
+          session.create(vim.fn.getcwd(), function(r)
+            if r.err then
+              notify(r.err)
+              return
+            end
+            panel.restart()
+            notify("new session: " .. tostring(session.get_target()), vim.log.levels.INFO)
+          end)
+        else
+          session.set_target(choice.id, (choice.location or {}).directory)
+          panel.restart()
+          notify("switched to " .. choice.id, vim.log.levels.INFO)
+        end
+      end)
     end)
   end)
 end
 
 --- Inspect the current session's file changes.
 function M.diff()
-  diff.preview()
+  M.ensure(function(err)
+    if err then
+      notify(err)
+      return
+    end
+    diff.preview()
+  end)
 end
 
 --- Surface pending permission requests.
 function M.permissions()
-  permission.prompt_pending()
+  M.ensure(function(err)
+    if err then
+      notify(err)
+      return
+    end
+    permission.prompt_pending()
+  end)
 end
 
 --- Compact the target session.
@@ -408,10 +489,10 @@ end
 --- A short status string for statuslines.
 ---@return string
 function M.statusline()
-  if not state.connected then
+  if not state.connected or not client.connected() then
     return ""
   end
-  if not session.get_target() then
+  if not session.matches(vim.fn.getcwd()) then
     return "opencode:connecting"
   end
   return "opencode"
@@ -442,10 +523,13 @@ function M.operator(text)
   return "g@"
 end
 
---- Call the plugin setup: applies user keymaps and reload settings.
-function M.setup()
-  local opts = config.get()
-  if opts.events.reload then
+--- Configure the plugin. Intended to receive the lazy.nvim `opts` table, but
+--- works just as well when called directly. Idempotent.
+---@param opts? opencode.Opts
+function M.setup(opts)
+  config.setup(opts)
+  local cfg = config.get()
+  if cfg.events.reload then
     vim.opt.autoread = true
   end
   bindings.apply()

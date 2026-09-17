@@ -9,6 +9,7 @@
   },
   "workspace": {
     "checkThirdParty": false,
-    "library": ["/opt/nvim/share/nvim/runtime/lua"]
+    "ignoreDir": ["tests"],
+    "library": ["/opt/nvim/share/nvim/runtime/lua", "/usr/share/nvim/runtime/lua"]
   }
 }

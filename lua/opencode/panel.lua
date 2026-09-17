@@ -23,19 +23,22 @@ local function alive()
   return M.buf ~= nil and vim.api.nvim_buf_is_valid(M.buf) and (vim.bo[M.buf].channel or 0) > 0
 end
 
---- Build the command string used to launch the app, based on `panel.open`.
----@return string
-local function build_cmd()
+--- Build the argv used to launch the app, based on `panel.open`.
+---
+--- Returned as a list (not a shell string) so the session id is passed as a
+--- literal argument and can never be interpreted as shell syntax.
+---@return string[]
+local function build_argv()
   local opts = config.get().panel
   local target = require("opencode.session").get_target()
   if opts.open == "session" and target then
-    return "opencode --session " .. target
+    return { "opencode", "--session", target }
   elseif opts.open == "mini" then
-    return target and ("opencode mini --session " .. target) or "opencode mini"
+    return target and { "opencode", "mini", "--session", target } or { "opencode", "mini" }
   elseif opts.open == "continue" then
-    return "opencode --continue"
+    return { "opencode", "--continue" }
   end
-  return "opencode"
+  return { "opencode" }
 end
 
 --- Open the panel (or focus it when already open).
@@ -55,7 +58,7 @@ function M.open()
     M.buf = nil
   end
 
-  -- Create the split first, so `:terminal` inherits the correct window size.
+  -- Create the split first, so the terminal inherits the correct window size.
   if opts.position == "left" then
     vim.cmd("topleft vsplit")
   else
@@ -70,7 +73,14 @@ function M.open()
   if alive() then
     vim.api.nvim_win_set_buf(win, M.buf)
   else
-    vim.cmd("terminal " .. build_cmd())
+    -- Launch the app with an argv list: no shell is involved, so a session id is
+    -- never reinterpreted as shell syntax.
+    local ok, id = pcall(vim.fn.jobstart, build_argv(), { term = true })
+    if not ok or id <= 0 then
+      vim.api.nvim_win_close(win, true)
+      vim.notify("opencode: could not start the opencode CLI", vim.log.levels.ERROR)
+      return false
+    end
     M.buf = vim.api.nvim_get_current_buf()
     M.session = target
     spawned = true
@@ -110,28 +120,18 @@ function M.send(text)
   return true
 end
 
---- Type text into the running TUI without submitting (prefill the prompt).
----@param text string
----@return boolean typed
-function M.type(text)
-  if not (M.buf and vim.api.nvim_buf_is_valid(M.buf)) then
-    return false
-  end
-  local chan = vim.bo[M.buf].channel
-  if not chan or chan <= 0 then
-    return false
-  end
-  local body = text:gsub("\r\n", "\n"):gsub("\r", "\n")
-  vim.fn.chansend(chan, body)
-  return true
-end
-
---- Wait until the terminal has finished its initial draw (content is stable).
+--- Wait until the terminal has finished its initial draw.
+---
+--- "Ready" means the terminal buffer stayed identical (and non-trivial) for a
+--- few consecutive polls. It is only a heuristic: when it cannot be trusted the
+--- caller is told `ready = false` and must not inject blindly (see `deliver`,
+--- which falls back to the API in that case).
 ---@param cb fun(ready: boolean)
----@param timeout? integer Milliseconds before giving up (default 12000).
+---@param timeout? integer Milliseconds before giving up (default 8000).
 function M.wait_ready(cb, timeout)
-  local deadline = vim.uv.now() + (timeout or 12000)
+  local deadline = vim.uv.now() + (timeout or 8000)
   local last = nil
+  local stable = 0
   local function check()
     if not (M.buf and vim.api.nvim_buf_is_valid(M.buf)) then
       cb(false)
@@ -140,15 +140,20 @@ function M.wait_ready(cb, timeout)
     local lines = vim.api.nvim_buf_get_lines(M.buf, 0, -1, false)
     local snapshot = table.concat(lines, "\n")
     if #snapshot > 50 and snapshot == last then
-      cb(true)
-      return
+      stable = stable + 1
+      if stable >= 3 then
+        cb(true)
+        return
+      end
+    else
+      stable = 0
     end
     last = snapshot
     if vim.uv.now() > deadline then
       cb(false)
       return
     end
-    vim.defer_fn(check, 300)
+    vim.defer_fn(check, 200)
   end
   check()
 end
@@ -161,27 +166,10 @@ function M.close()
   M.win = nil
 end
 
---- Toggle the panel open/closed.
-function M.toggle()
-  if M.is_open() then
-    M.close()
-  else
-    M.open()
-  end
-end
-
 --- Focus the panel window if it is currently open.
 function M.focus()
   if M.is_open() then
     vim.api.nvim_set_current_win(M.win)
-  end
-end
-
---- Focus the panel and enter terminal input mode so typing reaches opencode.
-function M.enter()
-  M.focus()
-  if M.is_open() then
-    vim.cmd("startinsert")
   end
 end
 

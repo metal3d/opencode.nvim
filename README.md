@@ -49,44 +49,46 @@ vim.pack.add({
 })
 
 ---@type opencode.Opts
-vim.g.opencode_opts = {}
+require("opencode").setup({
+  -- your options here (see Configuration)
+})
 ```
 
-With [lazy.nvim](https://github.com/folke/lazy.nvim):
+With [lazy.nvim](https://github.com/folke/lazy.nvim), pass the options through
+`opts`: lazy.nvim calls `require("opencode").setup(opts)` for you.
 
 ```lua
 {
   "metal3d/opencode.nvim",
   event = "VeryLazy",
-  config = function()
-    ---@type opencode.Opts
-    vim.g.opencode_opts = {}
-
-    vim.keymap.set({ "n", "x" }, "<leader>oca", function()
-      require("opencode").ask()
-    end, { desc = "Ask OpenCode about @this" })
-    vim.keymap.set({ "n", "x" }, "<leader>oct", function()
-      require("opencode").toggle()
-    end, { desc = "Toggle OpenCode panel" })
-    vim.keymap.set({ "n", "x" }, "<leader>ocr", function()
-      require("opencode").review()
-    end, { desc = "Review @this" })
-    vim.keymap.set({ "n", "x" }, "<leader>ocf", function()
-      require("opencode").fix()
-    end, { desc = "Fix @diagnostics" })
-  end,
+  ---@type opencode.Opts
+  opts = {
+    -- opt into the recommended <leader>oc* keymaps (see Keymaps)
+    keys = "recommended",
+  },
 }
+```
+
+If a spec also provides a `config` function, lazy.nvim no longer calls
+`setup()` automatically — call it yourself inside `config`:
+
+```lua
+config = function(_, opts)
+  require("opencode").setup(opts)
+end,
 ```
 
 Run `:checkhealth opencode` after setup.
 
 ## Configuration
 
-Configuration lives in the global `vim.g.opencode_opts` table and is merged
-over the defaults in `lua/opencode/config.lua`.
+Configure the plugin with `require("opencode").setup(opts)`. Options are merged
+over the defaults in `lua/opencode/config.lua`. The legacy global
+`vim.g.opencode_opts` is still honoured (defaults < global < `setup(opts)`), so
+existing configs keep working.
 
 ```lua
-vim.g.opencode_opts = {
+require("opencode").setup({
   server = {
     username = nil,  -- basic-auth user (defaults to "opencode")
     url = nil,       -- explicit server URL; nil = auto-discover
@@ -109,22 +111,57 @@ vim.g.opencode_opts = {
     document = "Add comments documenting @this.",
     test = "Add tests for @this.",
   },
-  keys = {},         -- {( lhs, action-fn | action-id )} applied by setup()
+  -- Opt into the recommended <leader>oc* set with the string "recommended",
+  -- or map an lhs to a function / built-in action id:
+  --   keys = "recommended",
+  --   keys = { ["<leader>ocs"] = "session" },
+  keys = {},
   session = {
     mode = "recent", -- "recent" adopts the latest session; "new" creates one
   },
   events = {
     reload = true,   -- set vim.o.autoread so edited buffers reload
   },
+})
+```
+
+### Keymaps
+
+Two ways to bind keys:
+
+**Recommended set** — `keys = "recommended"` installs a `<leader>oc*` namespace:
+
+| lhs | action |
+| --- | --- |
+| `<leader>oct` | toggle the panel |
+| `<leader>oca` | ask about the context |
+| `<leader>ocr` | review `@this` |
+| `<leader>ocf` | fix `@diagnostics` |
+| `<leader>oce` | explain `@this` |
+| `<leader>ocu` | audit `@this` |
+| `<leader>ocs` | switch session |
+| `<leader>occ` | action palette |
+| `<leader>ocd` | session diff |
+
+**Custom set** — `keys` maps a left-hand side to a Lua function or a built-in
+action id (invoked as `require("opencode").command(id)`):
+
+```lua
+keys = {
+  ["<leader>on"] = function() require("opencode").prompt("@this") end,
+  ["<leader>os"] = "session",
 }
 ```
+
+Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
+`session`, `diff`, `permissions`, `compact`, `interrupt`.
 
 ## Usage
 
 | `:Opencode` command | Description                            |
 | ------------------- | -------------------------------------- |
 | `:OpencodeToggle`   | Open / close the side panel            |
-| `:OpencodeAsk [text]` | Focus the prompt line               |
+| `:OpencodeAsk`      | Open a prompt popup                    |
 | `:OpencodeReview`   | Send "Review @this"                    |
 | `:OpencodeFix`      | Send "Fix @diagnostics"                |
 | `:OpencodeExplain`  | Send "Explain @this"                   |
@@ -137,8 +174,8 @@ vim.g.opencode_opts = {
 ### API (`require("opencode")`)
 
 - `toggle()` — toggle the OpenCode terminal on the side.
-- `ask()` — open a floating input popup (prefilled with the current context
-  reference) and send your question.
+- `ask()` — open a floating input popup; the current context reference is
+  captured and prepended to your question when it is sent.
 - `prompt(text)` — send a prompt, expanding context placeholders.
 - `review()` / `fix()` / `explain()` — run a named prompt.
 - `send()` — send the current line.
@@ -149,7 +186,8 @@ vim.g.opencode_opts = {
 - `statusline()` — short status text for statuslines.
 - `format(entry)` — format a `{ path, from, to }` location as a reference.
 - `operator(text)` — prompt over a motion/selection with dot-repeat support.
-- `setup()` — apply user keymaps from `opts.keys`.
+- `setup(opts)` — configure the plugin (lazy.nvim calls this automatically when
+  a spec uses `opts`).
 
 ### Contexts
 
@@ -221,7 +259,7 @@ Unsaved buffers are never overwritten — save or discard first.
 ## Layout
 
 ```
-plugin/opencode.lua      startup wiring: highlight groups, commands, reload
+plugin/opencode.lua      startup wiring: user commands, reload
 lua/opencode/            plugin implementation
   init.lua               public API
   config.lua             defaults + option merge
@@ -236,6 +274,10 @@ lua/opencode/            plugin implementation
   bindings.lua           recommended keymaps
   health.lua             :checkhealth
   util.lua               dependency-free helpers
+tests/                   plenary-based test suite (`make test`)
+  minimal_init.lua       isolated init used by the runner
+  opencode/*_spec.lua    specs
+.github/workflows/       CI (tests on Neovim 0.11 / stable / nightly)
 ```
 
 ## License

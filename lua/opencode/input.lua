@@ -57,7 +57,7 @@ function M.input(default, on_submit)
   local opts = { buffer = buf }
   vim.keymap.set({ "i", "n" }, "<CR>", submit, vim.tbl_extend("force", opts, { desc = "OpenCode: send" }))
   vim.keymap.set({ "i", "n" }, "<C-c>", close, vim.tbl_extend("force", opts, { desc = "OpenCode: cancel" }))
-  vim.keymap.set("n", "<Esc>", close, vim.tbl_extend("force", opts, { desc = "OpenCode: cancel" }))
+  vim.keymap.set({ "i", "n" }, "<Esc>", close, vim.tbl_extend("force", opts, { desc = "OpenCode: cancel" }))
 end
 
 return M

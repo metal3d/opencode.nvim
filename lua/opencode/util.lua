@@ -19,14 +19,15 @@ end
 ---@param start? string Directory to start searching from.
 ---@return string?
 function M.find_up(name, start)
-  local dir = vim.fn.fnamemodify(start or vim.fn.getcwd(), ":p")
+  local dir = vim.fn.fnamemodify(start or vim.fn.getcwd(), ":p"):gsub("/$", "")
   while true do
-    local stat = vim.uv.fs_stat(dir .. name)
+    local candidate = dir .. "/" .. name
+    local stat = vim.uv.fs_stat(candidate)
     if stat and stat.type == "file" then
-      return dir .. name
+      return candidate
     end
     local parent = vim.fn.fnamemodify(dir, ":h")
-    if parent == dir then
+    if parent == dir or parent == "" then
       return nil
     end
     dir = parent

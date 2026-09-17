@@ -7,29 +7,95 @@ local client = require("opencode.client")
 
 local M = {}
 
+--- Whether the subscription is wanted (set by `subscribe`, cleared by
+--- `unsubscribe`). Reconnection only happens while this is true.
 M.subscribed = false
+--- Whether a stream is currently open.
+M.streaming = false
+--- Partial SSE bytes carried between chunks.
 M.buffer = ""
+--- Optional in-process handler.
 M.on_event = nil
+--- Optional predicate: when set, only events it accepts are dispatched.
+---@type fun(ev: table): boolean?
+M.filter = nil
+
+--- Reconnection backoff, in milliseconds: the delay doubles on each failure up
+--- to `retry_max_ms` and resets to `retry_initial_ms` as soon as data arrives.
+M.retry_initial_ms = 1000
+M.retry_max_ms = 30000
+M.retry_ms = 1000
+--- Pending reconnection timer, if any.
+M.retry_timer = nil
+
+--- Cancel a pending reconnection.
+local function cancel_retry()
+  if M.retry_timer and not M.retry_timer:is_closing() then
+    M.retry_timer:stop()
+    M.retry_timer:close()
+  end
+  M.retry_timer = nil
+end
+
+--- Open one SSE stream, re-arming on end while a subscription is still wanted.
+local function connect()
+  M.streaming = true
+  -- Drop any partial event left over from the previous (dead) connection.
+  M.buffer = ""
+  client.stream("/api/event", {
+    on_data = function(chunk)
+      -- Data flowing means the stream is healthy: reset the backoff.
+      M.retry_ms = M.retry_initial_ms
+      M.ingest(chunk)
+    end,
+    on_done = function()
+      M.streaming = false
+      if not M.subscribed then
+        return
+      end
+      cancel_retry()
+      local delay = M.retry_ms
+      M.retry_ms = math.min(M.retry_ms * 2, M.retry_max_ms)
+      M.retry_timer = vim.uv.new_timer()
+      M.retry_timer:start(
+        delay,
+        0,
+        vim.schedule_wrap(function()
+          M.retry_timer = nil
+          if M.subscribed and not M.streaming then
+            connect()
+          end
+        end)
+      )
+    end,
+  })
+end
 
 --- Begin (or re-arm) the SSE subscription.
+---
+--- Idempotent while a subscription is wanted, and automatically reconnects
+--- (with exponential backoff) when the stream drops.
 function M.subscribe()
   if M.subscribed then
     return
   end
   M.subscribed = true
-  client.stream("/api/event", {
-    on_data = function(chunk)
-      M.ingest(chunk)
-    end,
-    on_done = function()
-      M.subscribed = false
-    end,
-  })
+  M.retry_ms = M.retry_initial_ms
+  connect()
+end
+
+--- Stop the subscription and cancel any pending reconnection.
+function M.unsubscribe()
+  M.subscribed = false
+  cancel_retry()
 end
 
 --- Dispatch a decoded event to Neovim and the in-process handler.
 local function dispatch(ev)
   if type(ev) ~= "table" or type(ev.type) ~= "string" then
+    return
+  end
+  if M.filter and not M.filter(ev) then
     return
   end
   pcall(vim.api.nvim_exec_autocmds, "User", {
@@ -58,9 +124,9 @@ function M.ingest(chunk)
     M.buffer = M.buffer:sub(tail + 2)
     local payload = nil
     for line in raw:gmatch("[^\r\n]+") do
-      local s, _ = line:find("^data: ")
-      if s then
-        local body = line:sub(4)
+      local _, stop = line:find("^data: ")
+      if stop then
+        local body = line:sub(stop + 1)
         local ok, decoded = pcall(vim.json.decode, body)
         if ok and decoded then
           payload = decoded
