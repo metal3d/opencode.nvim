@@ -208,6 +208,53 @@ function M.ask()
   end)
 end
 
+--- Add the current context to the running TUI prompt, without submitting it.
+---
+--- This is the "prefill" gesture: it types the rendered context at the prompt's
+--- cursor and stops there, leaving you free to finish the sentence before
+--- sending. It only makes sense with a live TUI (the v2 API has no equivalent
+--- for filling a prompt without processing it), so nothing is sent when the
+--- panel is not running.
+---@param placeholders? string Context template to render (default `@this`).
+---@return boolean added
+function M.append(placeholders)
+  if not panel.is_open() and not panel.has_job() then
+    notify("no running opencode panel to add context to", vim.log.levels.WARN)
+    return false
+  end
+  -- Capture the context first: opening (or focusing) the panel moves the cursor
+  -- and can lose a visual selection, exactly like `ask` guards against.
+  local text = context.render(placeholders or "@this")
+  if text == "" then
+    notify("nothing to add: empty context", vim.log.levels.WARN)
+    return false
+  end
+  -- Reopen the split when the job is alive but hidden.
+  local spawned = panel.open()
+  ---@param via_pty boolean
+  local function go(via_pty)
+    if via_pty and panel.append(text) then
+      return
+    end
+    notify("could not add context: the opencode panel is not accepting input", vim.log.levels.WARN)
+  end
+  if spawned then
+    -- Same reasoning as `deliver`: do not type into a TUI that is still drawing.
+    panel.wait_ready(function(ready)
+      if ready then
+        vim.defer_fn(function()
+          go(true)
+        end, 200)
+      else
+        go(false)
+      end
+    end)
+  else
+    go(true)
+  end
+  return true
+end
+
 --- Send a prompt through the legacy TUI control (lands in the active tab).
 ---@param text string
 ---@param cb fun(result: { err?: string })

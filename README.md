@@ -135,6 +135,7 @@ Two ways to bind keys:
 | --- | --- |
 | `<leader>oct` | toggle the panel |
 | `<leader>oca` | ask about the context |
+| `<leader>ocA` | add the context to the prompt (no submit) |
 | `<leader>ocr` | review `@this` |
 | `<leader>ocf` | fix `@diagnostics` |
 | `<leader>oce` | explain `@this` |
@@ -162,6 +163,7 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
 | ------------------- | -------------------------------------- |
 | `:OpencodeToggle`   | Open / close the side panel            |
 | `:OpencodeAsk`      | Open a prompt popup                    |
+| `:OpencodeAdd`      | Add the current context to the prompt (no submit) |
 | `:OpencodeReview`   | Send "Review @this"                    |
 | `:OpencodeFix`      | Send "Fix @diagnostics"                |
 | `:OpencodeExplain`  | Send "Explain @this"                   |
@@ -176,6 +178,10 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
 - `toggle()` — toggle the OpenCode terminal on the side.
 - `ask()` — open a floating input popup; the current context reference is
   captured and prepended to your question when it is sent.
+- `append([placeholders])` — type the rendered context at the running TUI
+  prompt's cursor **without submitting it**, so you can finish the sentence
+  before sending. Requires a live panel (the v2 API cannot fill a prompt without
+  processing it). Defaults to `@this`; warns and does nothing without one.
 - `prompt(text)` — send a prompt, expanding context placeholders.
 - `review()` / `fix()` / `explain()` — run a named prompt.
 - `send()` — send the current line.

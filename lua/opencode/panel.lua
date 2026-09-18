@@ -23,6 +23,15 @@ local function alive()
   return M.buf ~= nil and vim.api.nvim_buf_is_valid(M.buf) and (vim.bo[M.buf].channel or 0) > 0
 end
 
+--- Whether a live `opencode` terminal exists, even when its split is closed.
+---
+--- Useful to tell "the panel was hidden" (reopen it) apart from "nothing is
+--- running" (asking the user to start it).
+---@return boolean
+function M.has_job()
+  return alive()
+end
+
 --- Build the argv used to launch the app, based on `panel.open`.
 ---
 --- Returned as a list (not a shell string) so the session id is passed as a
@@ -116,6 +125,26 @@ function M.open()
   vim.wo[win].signcolumn = "no"
   vim.api.nvim_set_current_win(win)
   return spawned
+end
+
+--- Write raw text into the running TUI without submitting it.
+---
+--- `\n` inserts a newline in the TUI prompt (like Ctrl+J) rather than sending,
+--- so multi-line context stays readable. No `\r` is ever sent: submitting is
+--- `send`'s job, and mixing the two is what made the old plugin fire a prompt
+--- when it only meant to prefill.
+---@param text string
+---@return boolean typed
+function M.append(text)
+  if not (M.buf and vim.api.nvim_buf_is_valid(M.buf)) then
+    return false
+  end
+  local chan = vim.bo[M.buf].channel
+  if not chan or chan <= 0 then
+    return false
+  end
+  local body = text:gsub("\r\n", "\n"):gsub("\r", "\n")
+  return vim.fn.chansend(chan, body) > 0
 end
 
 --- Inject text into the running TUI and submit it.

@@ -205,3 +205,64 @@ describe("panel.wait_ready", function()
     assert.is_false(result)
   end)
 end)
+
+describe("panel.append", function()
+  local real_buf
+
+  before_each(function()
+    real_buf = panel.buf
+  end)
+
+  after_each(function()
+    if panel.buf and vim.api.nvim_buf_is_valid(panel.buf) and panel.buf ~= real_buf then
+      local chan = vim.bo[panel.buf].channel
+      if chan and chan > 0 then
+        pcall(vim.fn.jobstop, chan)
+      end
+      pcall(vim.api.nvim_buf_delete, panel.buf, { force = true })
+    end
+    panel.buf = real_buf
+    panel.win = nil
+  end)
+
+  --- Start a real terminal job and capture everything written to its pty.
+  ---@return fun(): string Snapshot of the terminal contents.
+  local function recording_terminal()
+    local buf = vim.api.nvim_create_buf(false, true)
+    panel.buf = buf
+    vim.api.nvim_win_set_buf(0, buf)
+    vim.fn.jobstart({ "cat" }, { term = true })
+    -- `cat` echoes back what it receives, so the terminal buffer is our probe.
+    return function()
+      return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    end
+  end
+
+  it("writes the text without ever submitting it", function()
+    local snapshot = recording_terminal()
+    assert.is_true(panel.append("hello"))
+    -- Let `cat` echo the bytes back and the redraw settle.
+    vim.wait(600, function()
+      return snapshot():find("hello", 1, true) ~= nil
+    end)
+    local rendered = snapshot()
+    assert.is_truthy(rendered:find("hello", 1, true))
+    -- The crucial bit: no carriage return means no submission.
+    assert.is_falsy(rendered:find("\r", 1, true))
+  end)
+
+  it("turns newlines into prompt line breaks, not submissions", function()
+    local snapshot = recording_terminal()
+    assert.is_true(panel.append("a\nb"))
+    vim.wait(600, function()
+      local rendered = snapshot()
+      return rendered:find("a", 1, true) ~= nil and rendered:find("b", 1, true) ~= nil
+    end)
+    assert.is_falsy(snapshot():find("\r", 1, true))
+  end)
+
+  it("returns false when there is no live job", function()
+    panel.buf = vim.api.nvim_create_buf(false, true)
+    assert.is_false(panel.append("hello"))
+  end)
+end)

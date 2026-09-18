@@ -53,6 +53,10 @@ user_cmd("OpencodeAsk", function()
   oc().ask()
 end, { desc = "Ask OpenCode" })
 
+user_cmd("OpencodeAdd", function()
+  oc().append()
+end, { desc = "Add the current context to the OpenCode prompt" })
+
 user_cmd("OpencodeReview", function()
   oc().review()
 end, { desc = "Review the current context" })
