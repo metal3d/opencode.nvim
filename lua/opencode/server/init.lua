@@ -134,7 +134,7 @@ function Server.new(url, credentials)
     end)
     :next(
       function(results) ---@param results { [1]: { directory: string }, [2]: opencode.server.Session[], [3]: opencode.server.Agent[] }
-        self.cwd = results[1].directory or vim.fn.getcwd()
+        self.cwd = vim.fn.getcwd() or results[1].directory
         self.title = results[2][1] and results[2][1].title or "<No sessions>"
         self.subagents = vim.tbl_filter(function(agent) ---@param agent opencode.server.Agent
           return agent.mode == "subagent"
@@ -231,7 +231,7 @@ function Server:curl(path, method, body, on_success, on_error, opts)
 
   -- OpenCode v2 routes instance requests to a project by directory. Without it, a
   -- shared service answers for its own ambient cwd (PR #330 review).
-  local directory = self.cwd or vim.fn.getcwd()
+  local directory = vim.fn.getcwd() or self.cwd
   if directory and directory ~= "" then
     table.insert(cmd, "-H")
     table.insert(cmd, "x-opencode-directory: " .. vim.uri_encode(directory))
