@@ -6,7 +6,7 @@ function M.check()
   local uname = vim.uv.os_uname()
   vim.health.info(string.format("OS: %s %s (%s)", uname.sysname, uname.release, uname.machine))
 
-  vim.health.info("`nvim` version: `" .. tostring(vim.version()) .. "`")
+  vim.health.info("Neovim version: `" .. tostring(vim.version()) .. "`")
 
   local plugin_dir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h")
   local git_hash =
