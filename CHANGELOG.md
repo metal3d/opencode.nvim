@@ -63,6 +63,14 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The panel launches `opencode` from an argv list (`jobstart` with `term = true`)
   instead of a shell command line, so a session id is never reinterpreted as
   shell syntax. A missing CLI is now reported instead of raising an error.
+- The panel terminal no longer leaks into the editor window: `jobstart` with
+  `term = true` calls `termopen()`, which converts the *current* buffer into a
+  terminal. Because a split shows the same buffer in both windows, the TUI took
+  over the editor split (adding line numbers) and could clobber an open file.
+  The terminal now gets its own dedicated buffer.
+- `COLORTERM` is now forwarded to the panel's pseudo-terminal. Neovim does not
+  propagate it to a `termopen()` pty, but OpenCode's OpenTUI renderer relies on
+  it to select 24-bit colour and otherwise falls back to a degraded palette.
 - The SSE stream never delivered any event: `vim.system`'s stdout callback is
   `(err, data)`, but the first argument (always nil) was read as the chunk. The
   event pipeline is now live end to end.
