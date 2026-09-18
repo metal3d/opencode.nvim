@@ -41,6 +41,23 @@ local function build_argv()
   return { "opencode" }
 end
 
+--- Environment overrides for the terminal job.
+---
+--- Neovim (unlike most terminal emulators) does not propagate `COLORTERM` to a
+--- `termopen()` pty, but OpenCode's OpenTUI renderer relies on it to pick
+--- 24-bit colour (`if (COLORTERM === "truecolor" || COLORTERM === "24bit")`).
+--- Without it the app falls back to a degraded palette. Forward whatever the
+--- host terminal advertised, and default to truecolor when nothing is known,
+--- so the TUI renders in full colour.
+---@return table<string, string>
+local function build_env()
+  local colorterm = vim.env.COLORTERM
+  if not colorterm or colorterm == "" then
+    colorterm = "truecolor"
+  end
+  return { COLORTERM = colorterm }
+end
+
 --- Open the panel (or focus it when already open).
 ---@return boolean spawned # Whether a new terminal instance was started.
 function M.open()
@@ -73,9 +90,16 @@ function M.open()
   if alive() then
     vim.api.nvim_win_set_buf(win, M.buf)
   else
+    -- Give the terminal its own buffer before launching it. `jobstart` with
+    -- `term = true` calls `termopen()`, which turns the *current* buffer into a
+    -- terminal. After a `vsplit`, both windows show that same buffer, so the
+    -- terminal would also take over the editor window (and could clobber an open
+    -- file). A dedicated buffer confines it to the panel.
+    vim.api.nvim_win_set_buf(win, vim.api.nvim_create_buf(true, false))
     -- Launch the app with an argv list: no shell is involved, so a session id is
-    -- never reinterpreted as shell syntax.
-    local ok, id = pcall(vim.fn.jobstart, build_argv(), { term = true })
+    -- never reinterpreted as shell syntax. `env` restores `COLORTERM`, which
+    -- Neovim does not forward to the pty (see `build_env`).
+    local ok, id = pcall(vim.fn.jobstart, build_argv(), { term = true, env = build_env() })
     if not ok or id <= 0 then
       vim.api.nvim_win_close(win, true)
       vim.notify("opencode: could not start the opencode CLI", vim.log.levels.ERROR)
