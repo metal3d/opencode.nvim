@@ -3,7 +3,9 @@ vim.api.nvim_create_autocmd("User", {
   pattern = {
     "OpencodeEvent:server.connected",
     "OpencodeEvent:session.status",
-    "OpencodeEvent:server.instance.disposed",
+    "OpencodeEvent:session.execution.failed",
+    "OpencodeEvent:global.disposed",
+    "OpencodeEvent:location.shutdown",
   },
   callback = function(args)
     ---@type opencode.server.Event

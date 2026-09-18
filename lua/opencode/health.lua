@@ -35,7 +35,7 @@ function M.check()
     vim.health.ok("`opencode` available with version `" .. found_version .. "`.")
 
     local found_version_parsed = vim.version.parse(found_version)
-    local minimum_version = "1.17"
+    local minimum_version = "2.0"
     local minimum_version_parsed = vim.version.parse(minimum_version)
     if
       found_version_parsed
@@ -65,22 +65,26 @@ function M.check()
     })
   end
 
-  -- Binaries for auto-finding `opencode` process (Unix only)
-  if vim.fn.has("win32") == 0 and not (opts and opts.server and opts.server.url) then
-    if vim.fn.executable("pgrep") == 1 then
-      vim.health.ok("`pgrep` available.")
-    else
-      vim.health.error(
-        "`pgrep` executable not found in `$PATH`.",
-        { "Install `pgrep` and ensure it's in your `$PATH`", "Or set `vim.g.opencode_opts.server.url`." }
-      )
+  -- OpenCode v2 registers its background service in its state directory.
+  -- The plugin reads that registration to discover the server URL and password.
+  if not (opts and opts.server and opts.server.url) then
+    local state_home = vim.env.XDG_STATE_HOME
+    local dir = state_home and state_home ~= "" and vim.fs.joinpath(state_home, "opencode")
+      or vim.fs.joinpath(vim.env.HOME or "", ".local", "state", "opencode")
+    local found = nil
+    for _, name in ipairs({ "service.json", "server.json" }) do
+      local path = vim.fs.joinpath(dir, name)
+      if vim.fn.filereadable(path) == 1 then
+        found = path
+        break
+      end
     end
-    if vim.fn.executable("lsof") == 1 then
-      vim.health.ok("`lsof` available.")
+    if found then
+      vim.health.ok("OpenCode background service registered at `" .. found .. "`.")
     else
-      vim.health.error(
-        "`lsof` executable not found in `$PATH`.",
-        { "Install `lsof` and ensure it's in your `$PATH`", "Or set `vim.g.opencode_opts.server.url`." }
+      vim.health.info(
+        "No OpenCode background service registered yet. "
+          .. "Run `opencode service start` or set `vim.g.opencode_opts.server.url`."
       )
     end
   end

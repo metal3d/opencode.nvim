@@ -3,20 +3,40 @@
 
 local M = {}
 
----@type integer?
+---@type string?
 local current_edit_request_id = nil
 ---@type integer?
 local diff_tabpage = nil
 
----@param event opencode.server.Event | { type: "permission.asked" } | { type: "permission.replied" }
+---Extract the diff and target file from an OpenCode v2 edit permission request.
+---
+---v2 shape: `{ action = "edit", resources = { file }, metadata = { files = { { file, patch, … } } } }`
+---
+---@param event opencode.server.Event
+---@return { diff: string, filepath: string }?
+local function edit_preview(event)
+  if event.type ~= "permission.asked" or event.data.action ~= "edit" then
+    return nil
+  end
+
+  local files = event.data.metadata and event.data.metadata.files
+  local file = files and files[1]
+  if not file or not file.patch then
+    return nil
+  end
+
+  return { diff = file.patch, filepath = file.file or event.data.resources[1] }
+end
+
+---@param event opencode.server.Event
 ---@return Promise<opencode.server.PermissionReply>
 function M.diff(event)
   local Promise = require("opencode.promise")
 
-  if event.type == "permission.asked" and event.properties.permission == "edit" then
-    local diff = event.properties.metadata.diff
-
-    local filepath = event.properties.metadata.filepath
+  local preview = edit_preview(event)
+  if preview then
+    local diff = preview.diff
+    local filepath = preview.filepath
     local absolute_filepath = vim.fn.fnamemodify(filepath, ":p")
 
     -- Opencode sends the absolute path sometimes with the HOME and sometimes without
@@ -44,7 +64,6 @@ function M.diff(event)
     -- Diffing changes some of the buffer's display options (namely folding) to make it easier to compare side-by-side,
     -- so open the target file in a new tab first.
     vim.cmd("tabnew " .. filepath)
-    --  FIX: Errors in diff occur due to opencode's trimDiff function
     vim.cmd("silent vert diffpatch " .. patch_filepath)
 
     local diff_buff = vim.api.nvim_get_current_buf()
@@ -52,7 +71,7 @@ function M.diff(event)
     -- Also prevents it from lingering in e.g. pickers and `:ls`.
     vim.bo[diff_buff].bufhidden = "wipe"
     diff_tabpage = vim.api.nvim_get_current_tabpage()
-    current_edit_request_id = event.properties.id
+    current_edit_request_id = event.data.id
 
     return Promise.new(function(resolve, reject)
       -- Override native hunk-specific keymaps to reject the edit as a whole first
@@ -90,7 +109,7 @@ function M.diff(event)
         reject()
       end, { buffer = true, desc = "Close OpenCode edit diff" })
     end)
-  elseif event.type == "permission.replied" and current_edit_request_id == event.properties.requestID then
+  elseif event.type == "permission.replied" and current_edit_request_id == event.data.requestID then
     -- Entire edit was accepted or rejected, either in the plugin or TUI; close the diff
     current_edit_request_id = nil
     if diff_tabpage and vim.api.nvim_tabpage_is_valid(diff_tabpage) then

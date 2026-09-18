@@ -17,7 +17,7 @@ vim.api.nvim_create_autocmd("User", {
       :next(function(server)
         return require("opencode.events.permissions.edits").diff(event):next(function(reply)
           if reply then
-            return server:permit(event.properties.id, reply)
+            return server:permit(event.data.sessionID, event.data.id, reply)
           end
         end)
       end)

@@ -18,6 +18,7 @@ end
 ---
 ---@param default? string Text to pre-fill the input with.
 function M.ask(default)
+  M.open()
   require("opencode.server.discovery")
     .get()
     :next(function(server)
@@ -39,6 +40,7 @@ end
 ---
 ---@param opts? opencode.select.Opts Override configured options for this call.
 function M.select(opts)
+  M.open()
   require("opencode.server.discovery")
     .get()
     :next(function(server)
@@ -58,6 +60,7 @@ M.statusline = require("opencode.events.status").statusline
 ---
 ---@param prompt string
 function M.prompt(prompt)
+  M.open()
   require("opencode.server.discovery")
     .get()
     :next(function(server)
@@ -71,6 +74,7 @@ end
 ---
 ---@param command opencode.server.Command | string
 function M.command(command)
+  M.open()
   require("opencode.server.discovery")
     .get()
     :next(function(server)
@@ -106,6 +110,153 @@ function M.operator(prompt)
 
   vim.o.operatorfunc = "v:lua.opencode_prompt_operator"
   return "g@"
+end
+
+---The buffer backing an OpenCode TUI opened by `toggle()`, if any.
+---@type integer?
+local tui_buf = nil
+---The window currently showing that TUI, if visible.
+---@type integer?
+local tui_win = nil
+
+---Whether the tracked TUI terminal still has a live job.
+---
+---@return boolean
+local function tui_alive()
+  return tui_buf ~= nil and vim.api.nvim_buf_is_valid(tui_buf) and (vim.bo[tui_buf].channel or 0) > 0
+end
+
+---Path to the file caching one panel session ID per working directory.
+---@return string
+local function panel_sessions_file()
+  return vim.fs.joinpath(vim.fn.stdpath("state"), "opencode.nvim-panel-sessions.json")
+end
+
+---@return table<string, string>
+local function read_panel_sessions()
+  local path = panel_sessions_file()
+  if vim.fn.filereadable(path) ~= 1 then
+    return {}
+  end
+  local ok, decoded = pcall(vim.fn.json_decode, table.concat(vim.fn.readfile(path), "\n"))
+  return ok and type(decoded) == "table" and decoded or {}
+end
+
+---@param sessions table<string, string>
+local function write_panel_sessions(sessions)
+  pcall(vim.fn.writefile, { vim.fn.json_encode(sessions) }, panel_sessions_file())
+end
+
+---Perform a request against the registered OpenCode service, synchronously.
+---
+---@param method string
+---@param path string
+---@param body? string
+---@return table?
+local function service_request(method, path, body)
+  local info = require("opencode.server.discovery").registration()
+  if not info then
+    return nil
+  end
+
+  local cmd = {
+    "curl",
+    "-s",
+    "-S",
+    "--fail-with-body",
+    "-X",
+    method,
+    "-H",
+    "Content-Type: application/json",
+    "-H",
+    "Accept: application/json",
+  }
+  if info.password and info.password ~= "" then
+    local token = vim.base64 and vim.base64.encode("opencode:" .. info.password)
+      or vim.trim(vim.fn.system({ "base64" }, "opencode:" .. info.password):gsub("%s+", ""))
+    table.insert(cmd, "-H")
+    table.insert(cmd, "Authorization: Basic " .. token)
+  end
+  if body then
+    table.insert(cmd, "-d")
+    table.insert(cmd, body)
+  end
+  table.insert(cmd, info.url .. path)
+
+  local out = vim.fn.system(cmd)
+  if vim.v.shell_error ~= 0 or out == "" then
+    return nil
+  end
+  local ok, decoded = pcall(vim.fn.json_decode, out)
+  return ok and type(decoded) == "table" and decoded or nil
+end
+
+---Return the panel's session, reusing this directory's cached one while it still
+---exists. Keyed per working directory so concurrent Neovim instances (and
+---projects) each get their own panel session.
+---
+---@return string?
+local function panel_session()
+  local cwd = vim.fn.getcwd()
+  local sessions = read_panel_sessions()
+  local cached = sessions[cwd]
+
+  if cached and cached ~= "" then
+    local existing = service_request("GET", "/api/session/" .. cached)
+    if existing and existing.data then
+      return cached
+    end
+  end
+
+  local created = service_request("POST", "/api/session", "{}")
+  local id = created and created.data and created.data.id
+  if id then
+    sessions[cwd] = id
+    write_panel_sessions(sessions)
+  end
+  return id
+end
+
+---Show the OpenCode TUI panel on the right.
+---
+---Opens `opencode` in a right-hand split, reusing the existing terminal when one
+---is already running. A dedicated session is created so prompts from Neovim reach
+---this panel instead of whatever session the TUI would otherwise resume.
+function M.open()
+  if tui_win and vim.api.nvim_win_is_valid(tui_win) then
+    return
+  end
+
+  local origin = vim.api.nvim_get_current_win()
+  vim.cmd("botright vsplit")
+  if tui_alive() and tui_buf then
+    vim.api.nvim_win_set_buf(0, tui_buf)
+  else
+    local session_id = panel_session()
+    if session_id then
+      require("opencode.server").current_session_id = session_id
+      require("opencode.server")._current_session_seen = false
+      vim.cmd("terminal opencode --session " .. session_id)
+    else
+      vim.cmd("terminal opencode")
+    end
+    tui_buf = vim.api.nvim_get_current_buf()
+  end
+  tui_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_set_current_win(origin)
+end
+
+---Toggle the OpenCode TUI panel on the right.
+---
+---Opens `opencode` in a right-hand split if hidden, or hides it if visible.
+---The terminal keeps running across toggles.
+function M.toggle()
+  if tui_win and vim.api.nvim_win_is_valid(tui_win) then
+    vim.api.nvim_win_hide(tui_win)
+    tui_win = nil
+    return
+  end
+  M.open()
 end
 
 M.format = require("opencode.context").format

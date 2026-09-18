@@ -149,40 +149,10 @@ function M.select(context, opts)
       if choice.__type == "prompt" then
         return require("opencode.api.prompt").prompt(choice.text, context)
       elseif choice.__type == "command" then
-        if choice.name == "session.select" then
-          return require("opencode.ui.select_session").select_session(context.server):next(function(session)
-            return context.server:select_session(session.id)
-          end)
-        else
-          return require("opencode.api.command").command(choice.name, context.server)
-        end
+        return require("opencode.api.command").command(choice.name, context.server)
       elseif choice.__type == "server" then
         if choice.name == "server.connect" then
-          return require("opencode.server.discovery")
-            .locally()
-            :next(function(servers)
-              local configured = require("opencode.server.discovery").configured()
-              if configured then
-                return configured:next(function(configured_server)
-                  if
-                    not vim.tbl_contains(servers, function(local_server)
-                      return local_server.url == configured_server.url
-                    end, { predicate = true })
-                  then
-                    table.insert(servers, 1, configured_server)
-                  end
-                  return Promise.resolve(servers)
-                end)
-              else
-                return Promise.resolve(servers)
-              end
-            end)
-            :next(function(servers)
-              return require("opencode.ui.select_server").select_server(servers)
-            end)
-            :next(function(selected_server)
-              return selected_server:connect()
-            end)
+          return require("opencode.server.discovery").get()
         elseif choice.name == "server.start" then
           return config.opts.server.start()
         elseif choice.name == "server.disconnect" then

@@ -24,7 +24,11 @@ local defaults = {
     username = vim.env.OPENCODE_SERVER_USERNAME or "opencode", -- Same env vars and defaults as OpenCode
     password = vim.env.OPENCODE_SERVER_PASSWORD,
     start = function()
-      vim.cmd("vsplit term://opencode --port | wincmd p")
+      -- OpenCode v2 runs a background service that the TUI attaches to. Start it
+      -- first so the plugin can discover it via the service registration file,
+      -- then open a TUI connected to the same service.
+      vim.fn.system({ "opencode", "service", "start" })
+      vim.cmd("vsplit term://opencode | wincmd p")
     end,
   },
   contexts = {

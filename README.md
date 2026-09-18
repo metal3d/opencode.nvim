@@ -207,18 +207,20 @@ Select prompts to review, explain, and improve your code:
 
 ### Server
 
-Run `opencode` locally however you like and opencode.nvim will find them! Or point `vim.g.opencode_opts.server.url` to a specific server, including remotes.
+OpenCode v2 runs a **background service** that the TUI and other clients attach to. opencode.nvim discovers it automatically by reading OpenCode's registration file — its URL and generated password — from OpenCode's state directory (`$XDG_STATE_HOME/opencode/service.json`, or `~/.local/state/opencode/service.json`).
+
+Run `opencode service start` yourself, or point `vim.g.opencode_opts.server.url` to a specific server, including remotes.
 
 > [!IMPORTANT]
-> You _must_ run `opencode` with the `--port` flag to expose its server.
+> OpenCode v2 always secures its server with HTTP basic auth. opencode.nvim reads the generated password from the registration file, or falls back to `vim.g.opencode_opts.server.password` (and `username`, defaulting to the same `$OPENCODE_SERVER_PASSWORD` / `$OPENCODE_SERVER_USERNAME` environment variables as OpenCode).
 
-If opencode.nvim can't find a running `opencode`, it starts one via `vim.g.opencode_opts.server.start`, defaulting to `term://opencode --port`.
+If opencode.nvim can't find a running service, it starts one via `vim.g.opencode_opts.server.start`, which defaults to running `opencode service start` and opening a TUI connected to it.
 
 <details>
 <summary>Start via <a href="https://github.com/folke/snacks.nvim/blob/main/docs/terminal.md">snacks.terminal</a></summary>
 
 ```lua
-local opencode_cmd = 'opencode --port'
+local opencode_cmd = 'opencode'
 ---@type snacks.terminal.Opts
 local snacks_terminal_opts = {
   win = {
@@ -242,17 +244,13 @@ vim.keymap.set({ 'n', 't' }, '<C-.>', function()
   require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
 end, { desc = 'Toggle OpenCode' })
 
--- Optionally show upon submitting prompt
+-- Optionally show the terminal when a prompt is admitted to the session
 vim.api.nvim_create_autocmd('User', {
-  pattern = { 'OpencodeEvent:tui.command.execute' },
-  callback = function(args)
-    ---@type opencode.server.Event
-    local event = args.data.event
-    if event.properties.command == 'prompt.submit' then
-      local win = require('snacks.terminal').get(opencode_cmd, { create = false })
-      if win then
-        win:show()
-      end
+  pattern = { 'OpencodeEvent:session.inbox.delivered' },
+  callback = function()
+    local win = require('snacks.terminal').get(opencode_cmd, { create = false })
+    if win then
+      win:show()
     end
   end,
 })
@@ -289,8 +287,11 @@ Highlights and previews items when using [snacks.picker](https://github.com/folk
 Prompt OpenCode.
 
 - Injects configured contexts.
-- Trailing space appends; trailing "..." opens in Ask.
+- Trailing "..." opens in Ask.
 - OpenCode will interpret references to files or subagents.
+
+> [!NOTE]
+> On servers that expose the legacy `/tui/*` endpoints, a trailing space appends to the TUI prompt without submitting. Without them (OpenCode v2.0.x), the prompt is admitted straight to the active session.
 
 ### Operator — `require("opencode").operator()`
 
@@ -300,24 +301,27 @@ Wraps Prompt as an operator, supporting ranges and dot-repeat.
 
 Command OpenCode:
 
-| Command                  | Description                                |
-| ------------------------ | ------------------------------------------ |
-| `agent.cycle`            | Cycle selected agent                       |
-| `prompt.clear`           | Clear current prompt                       |
-| `prompt.submit`          | Submit current prompt                      |
-| `session.compact`        | Compact current session                    |
-| `session.first`          | Jump to first message in session           |
-| `session.half.page.up`   | Scroll messages up half a page             |
-| `session.half.page.down` | Scroll messages down half a page           |
-| `session.interrupt`      | Interrupt current session                  |
-| `session.last`           | Jump to last message in current session    |
-| `session.new`            | Start new session                          |
-| `session.page.up`        | Scroll messages up one page                |
-| `session.page.down`      | Scroll messages down one page              |
-| `session.select`         | Select session                             |
-| `session.share`          | Share current session                      |
-| `session.redo`           | Redo last undone action in current session |
-| `session.undo`           | Undo last action in current session        |
+| Command                   | Description                                |
+| ------------------------- | ------------------------------------------ |
+| `agent.cycle`             | Cycle selected agent                       |
+| `prompt.clear` †          | Clear current prompt                       |
+| `prompt.submit` †         | Submit current prompt                      |
+| `session.compact`         | Compact current session                    |
+| `session.first` †         | Jump to first message in session           |
+| `session.half.page.up` †  | Scroll messages up half a page             |
+| `session.half.page.down` †| Scroll messages down half a page           |
+| `session.interrupt`       | Interrupt current session                  |
+| `session.last` †          | Jump to last message in current session    |
+| `session.new`             | Start new session                          |
+| `session.page.up` †       | Scroll messages up one page                |
+| `session.page.down` †     | Scroll messages down one page              |
+| `session.select` †        | Select session                             |
+| `session.share` †         | Share current session                      |
+| `session.redo` †          | Redo last undone action in current session |
+| `session.undo` †          | Undo last action in current session        |
+
+> [!NOTE]
+> Commands marked † rely on OpenCode's legacy TUI control endpoints, which were removed in OpenCode v2.0.x and re-added in newer builds. They work when the connected server exposes `/tui/*`, and are no-ops otherwise. The unmarked commands map directly to OpenCode v2's HTTP API.
 
 ## 👀 Events
 
@@ -333,11 +337,11 @@ vim.api.nvim_create_autocmd("User", {
     ---@type string
     local url = args.data.url
 
-    -- See the available event types and their properties
+    -- See the available event types and their data
     vim.notify(vim.inspect(event))
     -- Do something useful
     if event.type == "session.status" then
-      vim.notify("OpenCode status updated: " .. event.properties.status.type)
+      vim.notify("OpenCode status updated: " .. event.data.status.type)
     end
   end,
 })
