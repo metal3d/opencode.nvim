@@ -20,7 +20,13 @@ local function edit_preview(event)
   end
 
   local files = event.data.metadata and event.data.metadata.files
-  local file = files and files[1]
+  -- A multi-file edit only shows files[1] while the reply covers the whole
+  -- request, so approve/reject blindly on the rest. Defer those to the generic
+  -- permission prompt instead.
+  if not files or #files ~= 1 then
+    return nil
+  end
+  local file = files[1]
   if not file or not file.patch then
     return nil
   end

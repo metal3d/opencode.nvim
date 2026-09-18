@@ -88,11 +88,12 @@ Server.__index = Server
 ---| { id: string, type: "session.created", data: table }
 ---| { id: string, type: string, data: table }
 
----Credentials for the most recently discovered server.
+---Credentials for discovered servers, keyed by normalized URL.
 ---OpenCode v2 always requires basic auth, and event listeners reconstruct server
----objects from a bare URL, so cache the discovered credentials for reuse.
----@type opencode.server.Credentials?
-Server.credentials = nil
+---objects from a bare URL, so cache the discovered credentials for reuse —
+---keyed so one service's password is never sent to another host.
+---@type table<string, opencode.server.Credentials>
+Server.credentials = {}
 
 ---Panel session targets, keyed by server URL so a target is never reused against
 ---a different service. `seen` flips once the TUI's `tabs.json` catches up.
@@ -108,13 +109,15 @@ Server.panel_targets = {}
 ---@return Promise<opencode.server.Server>
 function Server.new(url, credentials)
   local self = setmetatable({}, Server)
+  url = url:gsub("/$", "")
   if credentials then
-    Server.credentials = credentials
+    Server.credentials[url] = credentials
   end
-  local creds = credentials or Server.credentials or {}
-  self.url = url:gsub("/$", "")
-  self.username = creds.username or require("opencode.config").opts.server.username or "opencode"
-  self.password = creds.password or require("opencode.config").opts.server.password
+  local config = require("opencode.config").opts.server or {}
+  local creds = credentials or Server.credentials[url] or {}
+  self.url = url
+  self.username = creds.username or config.username or "opencode"
+  self.password = creds.password or config.password
   self.heartbeat_timer = vim.uv.new_timer()
 
   local Promise = require("opencode.promise")
