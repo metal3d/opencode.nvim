@@ -93,13 +93,23 @@ programs.nixvim = {
 The below examples are specific, but generalize to other plugins.
 
 <details>
-<summary><a href="https://github.com/folke/snacks.nvim">snacks.nvim</a></summary>
+<summary><a href="https://github.com/folke/snacks.nvim/blob/main/docs/input.md">snacks.input</a> (Ask)</summary>
 
 ```lua
 require("snacks").setup({
   input = {
     enabled = true, -- Enhances Ask
   },
+})
+```
+
+</details>
+
+<details>
+<summary><a href="https://github.com/folke/snacks.nvim/blob/main/docs/picker.md">snacks.picker</a> (Select)</summary>
+
+```lua
+require("snacks").setup({
   picker = {
     enabled = true, -- Enhances Select
     win = {
@@ -127,7 +137,53 @@ require("snacks").setup({
 </details>
 
 <details>
-<summary><a href="https://github.com/saghen/blink.cmp">blink.cmp</a></summary>
+<summary><a href="https://github.com/folke/snacks.nvim/blob/main/docs/terminal.md">snacks.terminal</a> (Server)</summary>
+
+```lua
+local opencode_cmd = 'opencode --port'
+---@type snacks.terminal.Opts
+local snacks_terminal_opts = {
+  win = {
+    position = 'right',
+    enter = false,
+  },
+}
+
+---@type opencode.Opts
+vim.g.opencode_opts = {
+  server = {
+    start = function()
+      require('snacks.terminal').open(opencode_cmd, snacks_terminal_opts)
+    end,
+  },
+}
+
+-- Can also leverage toggle functionality.
+-- If you use <leader> here, remove 't' — otherwise Neovim will add input delay to your <leader> when typing in the terminal to watch for the mapping.
+vim.keymap.set({ 'n', 't' }, '<C-.>', function()
+  require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
+end, { desc = 'Toggle OpenCode' })
+
+-- Optionally show upon submitting prompt
+vim.api.nvim_create_autocmd('User', {
+  pattern = { 'OpencodeEvent:tui.command.execute' },
+  callback = function(args)
+    ---@type opencode.server.Event
+    local event = args.data.event
+    if event.properties.command == 'prompt.submit' then
+      local win = require('snacks.terminal').get(opencode_cmd, { create = false })
+      if win then
+        win:show()
+      end
+    end
+  end,
+})
+```
+
+</details>
+
+<details>
+<summary><a href="https://github.com/saghen/blink.cmp">blink.cmp</a> (Completion)</summary>
 
 ```lua
 -- Configure blink.cmp to show completions in Ask from opencode.nvim's in-process LSP.
@@ -149,7 +205,7 @@ require("blink.cmp").setup({
 </details>
 
 <details>
-<summary><a href="https://github.com/nvim-lualine/lualine.nvim">lualine.nvim</a></summary>
+<summary><a href="https://github.com/nvim-lualine/lualine.nvim">lualine.nvim</a> (Statusline)</summary>
 
 ```lua
 require("lualine").setup({
@@ -212,53 +268,7 @@ Run `opencode` locally however you like and opencode.nvim will find them! Or poi
 > [!IMPORTANT]
 > You _must_ run `opencode` with the `--port` flag to expose its server.
 
-If opencode.nvim can't find a running `opencode`, it starts one via `vim.g.opencode_opts.server.start`, defaulting to `term://opencode --port`.
-
-<details>
-<summary>Start via <a href="https://github.com/folke/snacks.nvim/blob/main/docs/terminal.md">snacks.terminal</a></summary>
-
-```lua
-local opencode_cmd = 'opencode --port'
----@type snacks.terminal.Opts
-local snacks_terminal_opts = {
-  win = {
-    position = 'right',
-    enter = false,
-  },
-}
-
----@type opencode.Opts
-vim.g.opencode_opts = {
-  server = {
-    start = function()
-      require('snacks.terminal').open(opencode_cmd, snacks_terminal_opts)
-    end,
-  },
-}
-
--- Can also leverage toggle functionality.
--- If you use <leader> here, remove 't' — otherwise Neovim will add input delay to your <leader> when typing in the terminal to watch for the mapping.
-vim.keymap.set({ 'n', 't' }, '<C-.>', function()
-  require('snacks.terminal').toggle(opencode_cmd, snacks_terminal_opts)
-end, { desc = 'Toggle OpenCode' })
-
--- Optionally show upon submitting prompt
-vim.api.nvim_create_autocmd('User', {
-  pattern = { 'OpencodeEvent:tui.command.execute' },
-  callback = function(args)
-    ---@type opencode.server.Event
-    local event = args.data.event
-    if event.properties.command == 'prompt.submit' then
-      local win = require('snacks.terminal').get(opencode_cmd, { create = false })
-      if win then
-        win:show()
-      end
-    end
-  end,
-})
-```
-
-</details>
+If opencode.nvim can't find a running `opencode`, it starts one via `vim.g.opencode_opts.server.start`, defaulting to `term://opencode --port`. See [Integrations > snacks.terminal (Server)](#integrations) for a custom start example.
 
 opencode.nvim prioritizes focused pairing with a single OpenCode instance. As such, it connects to an OpenCode server before interacting with it, listening for events and targeting it for future interactions. Consider disabling `vim.g.opencode_opts.server.connect` if you frequently jump between servers or don't care for disruptive synchronous events like permission requests.
 
