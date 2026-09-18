@@ -11,7 +11,6 @@ local function reset()
   state.connecting = false
   state.pending = {}
   client.set_server(nil)
-  client.tui = false
   vim.g.opencode_opts = nil
   config.opts = nil
   config.user = nil
@@ -23,7 +22,6 @@ describe("opencode.connect", function()
   before_each(function()
     real = {
       api = client.api,
-      detect_tui = client.detect_tui,
       subscribe = events.subscribe,
       unsubscribe = events.unsubscribe,
     }
@@ -32,7 +30,6 @@ describe("opencode.connect", function()
 
   after_each(function()
     client.api = real.api
-    client.detect_tui = real.detect_tui
     events.subscribe = real.subscribe
     events.unsubscribe = real.unsubscribe
     events.filter = nil
@@ -46,9 +43,6 @@ describe("opencode.connect", function()
     local captured
     client.api = function(_, _, _, cb)
       captured = cb
-    end
-    client.detect_tui = function(cb)
-      cb(true)
     end
     events.subscribe = function() end
     config.setup({ server = { url = "http://test", password = "p" } })

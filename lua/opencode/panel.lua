@@ -150,7 +150,10 @@ end
 --- Inject text into the running TUI and submit it.
 ---
 --- This writes to the terminal's pty, so the text lands in the tab the user is
---- looking at (unlike the HTTP API, which targets a specific session).
+--- looking at (unlike the HTTP API, which targets a specific session). Note that
+--- sending prompts does **not** go through here anymore: the v2 API is the
+--- default path (see `deliver`). Kept as the submitting counterpart of `append`,
+--- for callers that explicitly want to drive the terminal.
 ---@param text string
 ---@return boolean sent
 function M.send(text)

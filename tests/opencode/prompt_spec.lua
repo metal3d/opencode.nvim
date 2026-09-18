@@ -9,8 +9,8 @@ describe("opencode.prompt delivery", function()
     real = {
       ensure = oc.ensure,
       open = panel.open,
-      wait_ready = panel.wait_ready,
       send = panel.send,
+      append = panel.append,
       prompt = session.prompt,
     }
     oc.ensure = function(cb)
@@ -21,45 +21,43 @@ describe("opencode.prompt delivery", function()
   after_each(function()
     oc.ensure = real.ensure
     panel.open = real.open
-    panel.wait_ready = real.wait_ready
     panel.send = real.send
+    panel.append = real.append
     session.prompt = real.prompt
   end)
 
-  it("injects into the TUI once it is ready", function()
-    panel.open = function()
-      return true
-    end
-    panel.wait_ready = function(cb)
-      cb(true)
-    end
-    local sent
-    panel.send = function(text)
-      sent = text
-      return true
-    end
-    session.prompt = function()
-      error("should not fall back")
+  it("sends through the v2 API, which is the point of truth", function()
+    local asked
+    session.prompt = function(text, _, cb)
+      asked = text
+      cb({})
     end
 
     oc.prompt("hi")
-    vim.wait(1000, function()
-      return sent ~= nil
-    end)
-    assert.are.equal("hi", sent)
+
+    assert.are.equal("hi", asked)
   end)
 
-  it("falls back to the API when the TUI is not ready", function()
-    panel.open = function()
-      return true
-    end
-    panel.wait_ready = function(cb)
-      cb(false)
-    end
-    local sent = false
+  it("never writes a prompt to the terminal", function()
     panel.send = function()
-      sent = true
-      return true
+      error("the pty must not be used to send prompts")
+    end
+    panel.append = function()
+      error("the pty must not be used to send prompts")
+    end
+    panel.open = function()
+      error("sending a prompt must not open the panel")
+    end
+    session.prompt = function(_, _, cb)
+      cb({})
+    end
+
+    oc.prompt("hi")
+  end)
+
+  it("works without a running panel", function()
+    panel.open = function()
+      return false
     end
     local asked
     session.prompt = function(text, _, cb)
@@ -68,24 +66,23 @@ describe("opencode.prompt delivery", function()
     end
 
     oc.prompt("hi")
-    assert.is_false(sent) -- never injected blindly
+
     assert.are.equal("hi", asked)
   end)
 
-  it("injects immediately when the panel was already open", function()
-    panel.open = function()
-      return false
+  it("surfaces API errors to the caller", function()
+    session.prompt = function(_, _, cb)
+      cb({ err = "boom" })
     end
-    panel.wait_ready = function()
-      error("should not wait")
-    end
-    local sent
-    panel.send = function(text)
-      sent = text
-      return true
-    end
+    local err
+    local real_notify = vim.notify
+    vim.notify = function() end
 
-    oc.prompt("hi")
-    assert.are.equal("hi", sent)
+    oc.prompt("hi", function(res)
+      err = res.err
+    end)
+
+    vim.notify = real_notify
+    assert.are.equal("boom", err)
   end)
 end)

@@ -61,7 +61,6 @@ function M.connect(cb)
     if err then
       -- Never keep a half-validated (or dead) server around.
       client.set_server(nil)
-      client.tui = false
       state.connected = false
       events.unsubscribe()
     end
@@ -104,16 +103,12 @@ function M.connect(cb)
         end
         events.subscribe()
       end
-      -- The server is validated: the watchdog has done its job and must not
-      -- abort a healthy server while the (optional) TUI probe runs.
+      -- The server is validated: the watchdog has done its job.
       if watchdog and not watchdog:is_closing() then
         watchdog:stop()
         watchdog:close()
       end
-      -- Detect legacy TUI control so prompts can target the active tab.
-      client.detect_tui(function()
-        flush(nil)
-      end)
+      flush(nil)
     end, server)
   end
 
@@ -255,60 +250,19 @@ function M.append(placeholders)
   return true
 end
 
---- Send a prompt through the legacy TUI control (lands in the active tab).
----@param text string
----@param cb fun(result: { err?: string })
-local function tui_send(text, cb)
-  client.api("POST", "/tui/append-prompt", { text = text }, function(r1)
-    if r1.err then
-      cb({ err = r1.err })
-      return
-    end
-    client.api("POST", "/tui/execute-command", { command = "prompt.submit" }, function(r2)
-      cb(r2.err and { err = r2.err } or {})
-    end)
-  end)
-end
-
 --- Deliver a prompt to OpenCode.
 ---
---- Prefers injecting into the running TUI terminal, so the text lands in the tab
---- the user is looking at. Falls back to `/tui/append-prompt` when available, or
---- to the v2 API targeting the owned session otherwise.
+--- The v2 API is the point of truth and the safe path: the prompt is always
+--- sent to the session owned for the current directory, and it works with or
+--- without a running panel. The terminal is only a display here, never a
+--- transport: `append` is the one gesture that still writes to the pty, because
+--- the API cannot prefill a prompt.
 ---@param text string
 ---@param cb fun(result: { err?: string })
 local function deliver(text, cb)
-  local spawned = panel.open()
-  ---@param via_pty boolean Whether injecting into the TUI terminal is allowed.
-  local function go(via_pty)
-    if via_pty and panel.send(text) then
-      cb({})
-      return
-    end
-    if client.tui then
-      tui_send(text, cb)
-      return
-    end
-    session.prompt(text, {}, function(res)
-      cb(res.err and { err = res.err } or {})
-    end)
-  end
-  if spawned then
-    -- Only inject into the terminal once we trust it is ready; otherwise fall
-    -- back to the API rather than typing into a half-drawn (or dead) TUI.
-    panel.wait_ready(function(ready)
-      if ready then
-        -- Give the freshly spawned TUI a moment to accept input.
-        vim.defer_fn(function()
-          go(true)
-        end, 200)
-      else
-        go(false)
-      end
-    end)
-  else
-    go(true)
-  end
+  session.prompt(text, {}, function(res)
+    cb(res.err and { err = res.err } or {})
+  end)
 end
 
 --- Send a prompt, expanding any context placeholders.

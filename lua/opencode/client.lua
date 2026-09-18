@@ -8,10 +8,6 @@ local M = {}
 ---@type { url: string, username?: string, password: string }?
 M.server = nil
 
----Whether the server exposes the legacy `/tui/*` control endpoints.
----@type boolean
-M.tui = false
-
 --- Timeouts (in seconds) for non-streaming requests. They keep a dead or
 --- unreachable server from leaving a caller waiting forever (which, before
 --- connection state was fixed, could lock out every later attempt).
@@ -26,27 +22,6 @@ end
 ---@return boolean
 function M.connected()
   return M.server ~= nil
-end
-
---- Detect the legacy `/tui/*` endpoints from the server's OpenAPI document.
---- These let the plugin drive the running TUI (append to its prompt, select a
---- session) so prompts land in the tab the user is looking at.
----@param cb fun(tui: boolean)
-function M.detect_tui(cb)
-  M.request("GET", "/openapi.json", nil, function(res)
-    if res.err then
-      M.tui = false
-      cb(false)
-      return
-    end
-    local ok, spec = pcall(vim.json.decode, res.body or "")
-    local has = ok
-      and type(spec) == "table"
-      and type(spec.paths) == "table"
-      and spec.paths["/tui/execute-command"] ~= nil
-    M.tui = has and true or false
-    cb(M.tui)
-  end)
 end
 
 --- Build the basic-auth curl arguments for a server.
