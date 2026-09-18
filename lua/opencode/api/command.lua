@@ -66,14 +66,21 @@ end
 ---
 ---Commands map onto v2 HTTP API calls where possible; TUI-only commands
 ---(scroll, navigation, prompt box) require the legacy `/tui/*` endpoints and
----reject with a clear message when the connected server does not expose them.
+---degrade to a silent no-op when the connected server does not expose them.
 ---
 ---@param command opencode.server.Command | string
 ---@param server opencode.server.Server
 ---@return Promise<any>
 function M.command(command, server)
   if command == "session.new" then
-    return server:create_session()
+    return server:create_session():next(function(created)
+      local id = created and created.data and created.data.id
+      if id then
+        -- Make the new session the target for subsequent prompts.
+        require("opencode.server").panel_targets[server.url] = { id = id, seen = false }
+      end
+      return Promise.resolve(created)
+    end)
   elseif command == "session.interrupt" then
     return server:resolve_session_id():next(function(session_id)
       return server:interrupt(session_id)
@@ -88,9 +95,8 @@ function M.command(command, server)
 
   if TUI_ONLY[command] then
     if not server.tui then
-      return Promise.reject(
-        "`" .. command .. "` requires the OpenCode TUI control endpoints, which this server does not expose."
-      )
+      -- No `/tui/*` on OpenCode v2.0.x: these have no API equivalent.
+      return Promise.resolve(nil)
     end
     return server:tui_execute_command(command):next(function()
       if command == "session.interrupt" then

@@ -48,7 +48,10 @@ local function find()
   local Promise = require("opencode.promise")
   local connected_server = require("opencode.server").connected
 
-  return connected_server and Promise.resolve(connected_server) or M.configured() or M.registered()
+  return connected_server and Promise.resolve(connected_server)
+    or M.configured()
+    or M.registered()
+    or Promise.reject("No OpenCode server found")
 end
 
 ---Look for an OpenCode server every second, rejecting if not found after five seconds.

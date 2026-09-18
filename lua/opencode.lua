@@ -147,7 +147,7 @@ local function write_panel_sessions(sessions)
   pcall(vim.fn.writefile, { vim.fn.json_encode(sessions) }, panel_sessions_file())
 end
 
----Perform a request against the registered OpenCode service, synchronously.
+---Perform a bounded request against the registered OpenCode service, synchronously.
 ---
 ---@param method string
 ---@param path string
@@ -159,21 +159,31 @@ local function service_request(method, path, body)
     return nil
   end
 
+  local server = require("opencode.config").opts.server or {}
+  local username = server.username or "opencode"
+  local password = info.password or server.password
+
   local cmd = {
     "curl",
     "-s",
     "-S",
     "--fail-with-body",
+    "--connect-timeout",
+    "1",
+    "--max-time",
+    "3",
     "-X",
     method,
     "-H",
     "Content-Type: application/json",
     "-H",
     "Accept: application/json",
+    "-H",
+    "x-opencode-directory: " .. vim.uri_encode(vim.fn.getcwd()),
   }
-  if info.password and info.password ~= "" then
-    local token = vim.base64 and vim.base64.encode("opencode:" .. info.password)
-      or vim.trim(vim.fn.system({ "base64" }, "opencode:" .. info.password):gsub("%s+", ""))
+  if password and password ~= "" then
+    local token = vim.base64 and vim.base64.encode(username .. ":" .. password)
+      or vim.trim(vim.fn.system({ "base64" }, username .. ":" .. password):gsub("%s+", ""))
     table.insert(cmd, "-H")
     table.insert(cmd, "Authorization: Basic " .. token)
   end
@@ -227,6 +237,12 @@ function M.open()
     return
   end
 
+  -- The panel is a local TUI attached to the local background service. When a
+  -- URL is configured (e.g. a remote server), leave it alone (PR #330 review).
+  if require("opencode.config").opts.server.url ~= nil then
+    return
+  end
+
   local origin = vim.api.nvim_get_current_win()
   vim.cmd("botright vsplit")
   if tui_alive() and tui_buf then
@@ -234,8 +250,10 @@ function M.open()
   else
     local session_id = panel_session()
     if session_id then
-      require("opencode.server").current_session_id = session_id
-      require("opencode.server")._current_session_seen = false
+      local info = require("opencode.server.discovery").registration()
+      if info then
+        require("opencode.server").panel_targets[info.url] = { id = session_id, seen = false }
+      end
       vim.cmd("terminal opencode --session " .. session_id)
     else
       vim.cmd("terminal opencode")

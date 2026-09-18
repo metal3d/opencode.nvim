@@ -28,6 +28,15 @@ local function edit_preview(event)
   return { diff = file.patch, filepath = file.file or event.data.resources[1] }
 end
 
+---Whether an edit permission carries a diff preview we can display.
+---Handlers use this to fall back to the generic permission prompt when it does not.
+---
+---@param event opencode.server.Event
+---@return boolean
+function M.has_preview(event)
+  return edit_preview(event) ~= nil
+end
+
 ---@param event opencode.server.Event
 ---@return Promise<opencode.server.PermissionReply>
 function M.diff(event)

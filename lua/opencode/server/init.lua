@@ -94,15 +94,10 @@ Server.__index = Server
 ---@type opencode.server.Credentials?
 Server.credentials = nil
 
----The session the plugin is currently targeting — set when opening the TUI panel,
----so prompts reach it without racing the TUI's `tabs.json` write.
----@type string?
-Server.current_session_id = nil
----Whether `tabs.json` has caught up with `current_session_id`. Until it has, the
----explicit target wins; afterwards the TUI is authoritative again (so session
----switches inside the TUI are honored).
----@type boolean
-Server._current_session_seen = false
+---Panel session targets, keyed by server URL so a target is never reused against
+---a different service. `seen` flips once the TUI's `tabs.json` catches up.
+---@type table<string, { id: string, seen: boolean }>
+Server.panel_targets = {}
 
 ---Attempt to connect to an OpenCode server and fetch its health and details.
 ---Rejects if the health fails — the last line of defense against false-positive server discovery.
@@ -229,6 +224,14 @@ function Server:curl(path, method, body, on_success, on_error, opts)
     -- We can always send credentials; servers with no auth set just ignore them
     table.insert(cmd, "-H")
     table.insert(cmd, "Authorization: " .. authorization)
+  end
+
+  -- OpenCode v2 routes instance requests to a project by directory. Without it, a
+  -- shared service answers for its own ambient cwd (PR #330 review).
+  local directory = self.cwd or vim.fn.getcwd()
+  if directory and directory ~= "" then
+    table.insert(cmd, "-H")
+    table.insert(cmd, "x-opencode-directory: " .. vim.uri_encode(directory))
   end
 
   if not opts.persistent then
@@ -428,22 +431,23 @@ function Server:resolve_session_id()
     return Promise.resolve(self.session_id)
   end
 
+  local target = Server.panel_targets[self.url]
   local from_tui = self:tui_current_session()
-  if from_tui and from_tui == Server.current_session_id then
+  if target and from_tui and from_tui == target.id then
     -- The TUI now shows the panel session; trust it from here on.
-    Server._current_session_seen = true
+    target.seen = true
   end
 
-  if Server.current_session_id and not Server._current_session_seen then
-    return Promise.resolve(Server.current_session_id)
+  if target and not target.seen then
+    return Promise.resolve(target.id)
   end
 
   if from_tui then
     return Promise.resolve(from_tui)
   end
 
-  if Server.current_session_id then
-    return Promise.resolve(Server.current_session_id)
+  if target then
+    return Promise.resolve(target.id)
   end
 
   return self:get_sessions():next(function(sessions)

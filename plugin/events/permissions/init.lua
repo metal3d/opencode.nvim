@@ -8,7 +8,13 @@ vim.api.nvim_create_autocmd("User", {
     local url = args.data.url
 
     local opts = require("opencode.config").opts.events.permissions or {}
-    if not opts.enabled or event.type ~= "permission.asked" or (opts.edits.enabled and event.data.action == "edit") then
+    -- Only defer to the edit-preview handler when it can actually render a diff;
+    -- otherwise fall back to the generic prompt so the request is not left pending.
+    local handled_as_edit = opts.edits
+      and opts.edits.enabled
+      and event.data.action == "edit"
+      and require("opencode.events.permissions.edits").has_preview(event)
+    if not opts.enabled or event.type ~= "permission.asked" or handled_as_edit then
       return
     end
 
