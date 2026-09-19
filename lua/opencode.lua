@@ -126,29 +126,6 @@ local function tui_alive()
   return tui_buf ~= nil and vim.api.nvim_buf_is_valid(tui_buf) and (vim.bo[tui_buf].channel or 0) > 0
 end
 
----The last open session tab opencode recorded for the current working directory,
----if any. Launching the TUI on that tab returns to already-open tabs instead of
----presenting a fresh session alongside them.
----
----@return string?
-local function panel_open_session()
-  local state_home = vim.env.XDG_STATE_HOME
-  local dir = state_home and state_home ~= "" and vim.fs.joinpath(state_home, "opencode")
-    or vim.fs.joinpath(vim.env.HOME or "", ".local", "state", "opencode")
-  local path = vim.fs.joinpath(dir, "latest", "tui", "tabs.json")
-  local ok, lines = pcall(vim.fn.readfile, path)
-  if not ok or not lines or #lines == 0 then
-    return nil
-  end
-  local decoded_ok, decoded = pcall(vim.fn.json_decode, table.concat(lines, "\n"))
-  if not decoded_ok or type(decoded) ~= "table" or type(decoded.cwd) ~= "table" then
-    return nil
-  end
-  local tabs = decoded.cwd[vim.fn.getcwd()] and decoded.cwd[vim.fn.getcwd()].tabs
-  local last = tabs and tabs[#tabs]
-  return last and last.sessionID or nil
-end
-
 ---Show the OpenCode TUI panel on the right.
 ---
 ---Opens `opencode` in a right-hand split, reusing the existing terminal when one
@@ -176,7 +153,7 @@ function M.open()
     -- cwd, so opencode builds sessions for this project; prompts then target
     -- those project sessions (see :resolve_session_id). When the TUI already has
     -- open tabs here, resume the last one instead of opening a fresh session.
-    local session_id = panel_open_session()
+    local session_id = require("opencode.util.state").last_tab_session(vim.fn.getcwd())
     if session_id and session_id ~= "" then
       vim.cmd("terminal opencode --session " .. session_id)
     else

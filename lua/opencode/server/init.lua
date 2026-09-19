@@ -395,24 +395,11 @@ end
 ---
 ---@return string?
 function Server:tui_current_session()
-  local state_home = vim.env.XDG_STATE_HOME
-  local dir = state_home and state_home ~= "" and vim.fs.joinpath(state_home, "opencode")
-    or vim.fs.joinpath(vim.env.HOME or "", ".local", "state", "opencode")
-  local path = vim.fs.joinpath(dir, "latest", "tui", "tabs.json")
-  local ok, lines = pcall(vim.fn.readfile, path)
-  if not ok or not lines or #lines == 0 then
-    return nil
-  end
-  local decoded_ok, decoded = pcall(vim.fn.json_decode, table.concat(lines, "\n"))
-  if not decoded_ok or type(decoded) ~= "table" or type(decoded.cwd) ~= "table" then
-    return nil
-  end
+  local tabs = require("opencode.util.state")
   for _, directory in ipairs({ self.cwd, vim.fn.getcwd() }) do
-    local entry = directory and decoded.cwd[directory]
-    local tabs = entry and entry.tabs
-    local last = tabs and tabs[#tabs]
-    if last and last.sessionID then
-      return last.sessionID
+    local session_id = directory and tabs.last_tab_session(directory)
+    if session_id then
+      return session_id
     end
   end
   return nil
@@ -432,10 +419,6 @@ end
 ---@return Promise<string>
 function Server:resolve_session_id()
   local Promise = require("opencode.promise")
-  if self.session_id then
-    return Promise.resolve(self.session_id)
-  end
-
   local from_tui = self:tui_current_session()
   if from_tui then
     return Promise.resolve(from_tui)
