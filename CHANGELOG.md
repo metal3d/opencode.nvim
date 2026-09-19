@@ -14,8 +14,8 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   API (REST + SSE), with no legacy `/tui/*` endpoints.
 - Side panel running the real `opencode` application in a terminal (vertical
   split, left or right), kept alive between toggles.
-- Prompts are sent over the v2 API to the session owned for the current
-  directory — the API is the point of truth.
+- Prompts are injected into the running TUI so they land in the tab you are
+  looking at, with a fallback to the v2 API.
 - Editor context placeholders: `@this`, `@selection`, `@buffer`, `@file`,
   `@diagnostics`.
 - Built-in prompts and actions: review, fix, explain, session switch, session
@@ -42,12 +42,6 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   precedence, so existing configs keep working.
 - `.stylua.toml` now matches the code style (`indent_type = "Spaces"`,
   `call_parentheses = "Always"`), so `stylua --check .` is clean; CI enforces it.
-- The v2 API is now the default path for every prompt (review, fix, explain,
-  `ask`, `send`). Previously the plugin preferred writing to the TUI's pty, so
-  prompts only worked the way they were expected to when the panel was open.
-  Sending no longer depends on the terminal at all, and works panel-closed.
-  `append()` is the sole remaining pty gesture, because the API cannot prefill a
-  prompt.
 
 ### Fixed
 

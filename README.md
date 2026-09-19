@@ -18,12 +18,8 @@ dependencies.
 - **OpenCode on the side** — a keymap toggles a split (left or right) running
   the real `opencode` app in a Neovim terminal. The instance stays alive between
   toggles.
-- **Prompt through the v2 API** — the API is the point of truth: review / fix /
-  explain always send to the session owned for the current directory, with or
-  without a running panel.
-- **Prefill the prompt from the editor** — `<leader>ocA` types the current
-  context into the running TUI prompt *without submitting it*, so you can finish
-  the sentence before sending. This is the only gesture that touches the pty.
+- **Prompts land in the active tab** — review/fix/explain inject into the running
+  TUI terminal, so they target whatever tab you are looking at.
 - **Drive via the v2 API** — session discovery, events, permissions and diffs use
   the OpenCode HTTP API.
 - **Review / fix / explain** — send `@this` / `@diagnostics` prompts with one
@@ -186,9 +182,9 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
   prompt's cursor **without submitting it**, so you can finish the sentence
   before sending. Requires a live panel (the v2 API cannot fill a prompt without
   processing it). Defaults to `@this`; warns and does nothing without one.
-- `prompt(text)` — send a prompt over the v2 API, expanding context placeholders.
-- `review()` / `fix()` / `explain()` — run a named prompt (also over the API).
-- `send()` — send the current line over the v2 API.
+- `prompt(text)` — send a prompt, expanding context placeholders.
+- `review()` / `fix()` / `explain()` — run a named prompt.
+- `send()` — send the current line.
 - `command([id])` — action palette, or run an action by id.
 - `session()` — list and switch sessions.
 - `diff()` / `permissions()` — session diff / pending permissions.
@@ -242,21 +238,17 @@ written to `service.json` (in `$XDG_STATE_HOME/opencode` or
 every request with HTTP basic auth. If no registration exists, it starts the
 service with `opencode service start`.
 
-### Where prompts go
-
-OpenCode's v2 API is the **point of truth**: every prompt (review, fix, explain,
-`ask`, `send`, `prompt`) is sent over HTTP to the session the plugin owns for the
-current directory (`session.mode`). This is the safe path — it works whether or
-not the panel is open, and it never depends on terminal parsing.
+### Targeting the active tab
 
 OpenCode exposes **no API for the TUI's active tab**, and the legacy `/tui/*`
-control endpoints are absent from OpenCode v2.0.x. So the plugin no longer tries
-to guess the active tab: what you see in the panel is whatever session that panel
-is attached to.
+control endpoints are absent from OpenCode v2.0.x. So instead of sending prompts
+through the HTTP API (which targets one specific session), the plugin **injects
+them into the running TUI's terminal**. The text is written to the terminal pty
+and submitted, so it always lands in the **tab the user is looking at**.
 
-The single exception is `append()` (`<leader>ocA`, `:OpencodeAdd`): the API
-cannot prefill a prompt without processing it, so that one gesture writes to the
-running TUI's pty — and deliberately never submits.
+If no local TUI terminal is available, it falls back to `/tui/append-prompt`
+(when the server exposes it) and finally to the v2 API targeting the session the
+plugin owns (`session.mode`).
 
 ### Reloading edits
 
