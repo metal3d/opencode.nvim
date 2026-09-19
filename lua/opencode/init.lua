@@ -197,14 +197,23 @@ function M.restart()
 end
 
 --- Open a floating input popup to ask about the current context (selection or
---- cursor line). The popup is empty; the context reference is injected into the
---- prompt on submit (not shown to the user).
+--- cursor line).
+---
+--- The popup is prefilled with the context reference so you can see exactly what
+--- is about to be sent: keep it to ask about the current context, clear it for an
+--- open question, or replace it with something else. The caret lands after the
+--- trailing space, ready for the question.
+---
+--- What you see is what is sent: the text is *not* re-rendered on submit, so a
+--- placeholder typed by hand here goes out literally.
 function M.ask()
   -- Capture the context now (we may be in visual mode and lose it in the popup).
   local ref = context.render("@this")
-  input.input("", function(text)
-    local full = ref ~= "" and (ref .. ": " .. text) or text
-    M.prompt(full)
+  -- The space after the colon matters: it keeps the question readable and stops
+  -- the caret from butting against the line number.
+  local prefix = ref ~= "" and (ref .. ": ") or ""
+  input.input(prefix, function(text)
+    M.prompt(text)
   end)
 end
 

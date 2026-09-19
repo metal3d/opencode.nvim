@@ -42,6 +42,10 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   precedence, so existing configs keep working.
 - `.stylua.toml` now matches the code style (`indent_type = "Spaces"`,
   `call_parentheses = "Always"`), so `stylua --check .` is clean; CI enforces it.
+- `ask()`'s popup is now prefilled with the context reference (`path:L42: `)
+  instead of hiding it until submit. You see exactly what will be sent, so you
+  can keep it for a contextual question, clear it for an open one, or edit it.
+  The text is not re-rendered on submit, so the popup is the source of truth.
 
 ### Fixed
 

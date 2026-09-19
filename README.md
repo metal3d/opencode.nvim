@@ -162,7 +162,7 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
 | `:Opencode` command | Description                            |
 | ------------------- | -------------------------------------- |
 | `:OpencodeToggle`   | Open / close the side panel            |
-| `:OpencodeAsk`      | Open a prompt popup                    |
+| `:OpencodeAsk`      | Open a prompt popup prefilled with the context |
 | `:OpencodeAdd`      | Add the current context to the prompt (no submit) |
 | `:OpencodeReview`   | Send "Review @this"                    |
 | `:OpencodeFix`      | Send "Fix @diagnostics"                |
@@ -176,8 +176,9 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
 ### API (`require("opencode")`)
 
 - `toggle()` — toggle the OpenCode terminal on the side.
-- `ask()` — open a floating input popup; the current context reference is
-  captured and prepended to your question when it is sent.
+- `ask()` — open a floating input popup, prefilled with the current context
+  reference. Keep it to ask about the context, clear it for an open question.
+  The popup is editable and what you see is what is sent.
 - `append([placeholders])` — type the rendered context at the running TUI
   prompt's cursor **without submitting it**, so you can finish the sentence
   before sending. Requires a live panel (the v2 API cannot fill a prompt without
