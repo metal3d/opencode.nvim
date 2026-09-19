@@ -74,11 +74,6 @@ end
 function M.command(command, server)
   if command == "session.new" then
     return server:create_session():next(function(created)
-      local id = created and created.data and created.data.id
-      if id then
-        -- Make the new session the target for subsequent prompts.
-        require("opencode.server").panel_targets[server.url] = { id = id, seen = false }
-      end
       return Promise.resolve(created)
     end)
   elseif command == "session.interrupt" then

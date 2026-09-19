@@ -25,10 +25,10 @@ local defaults = {
     password = vim.env.OPENCODE_SERVER_PASSWORD,
     start = function()
       -- OpenCode v2 runs a background service that the TUI attaches to. Start it
-      -- first so the plugin can discover it via the service registration file,
-      -- then open a TUI connected to the same service.
+      -- so the plugin can discover it via the service registration file. The
+      -- panel TUI is opened separately by `open()`/`toggle()`; opening another
+      -- terminal here would produce a second panel alongside it.
       vim.fn.system({ "opencode", "service", "start" })
-      vim.cmd("vsplit term://opencode | wincmd p")
     end,
   },
   contexts = {

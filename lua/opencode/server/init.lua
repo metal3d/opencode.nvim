@@ -52,7 +52,8 @@ Server.__index = Server
 ---@class opencode.server.Session
 ---@field id string
 ---@field title string
----@field time { created: integer, updated: integer }
+---@field location? { directory: string }
+---@field time { created: integer, updated: integer, viewed?: integer }
 
 ---@class opencode.server.Agent
 ---@field name string
@@ -94,11 +95,6 @@ Server.__index = Server
 ---keyed so one service's password is never sent to another host.
 ---@type table<string, opencode.server.Credentials>
 Server.credentials = {}
-
----Panel session targets, keyed by server URL so a target is never reused against
----a different service. `seen` flips once the TUI's `tabs.json` catches up.
----@type table<string, { id: string, seen: boolean }>
-Server.panel_targets = {}
 
 ---Attempt to connect to an OpenCode server and fetch its health and details.
 ---Rejects if the health fails — the last line of defense against false-positive server discovery.
@@ -423,9 +419,15 @@ function Server:tui_current_session()
 end
 
 ---Resolve the session to act on.
----Prefers the plugin's explicit panel session until the TUI catches up, then
----the session the TUI is currently viewing, then the most recently viewed
----(else updated) session.
+---
+---OpenCode v2 (2.0.x) cannot create a new session in a target directory via
+---`/api/session` — it always lands in the shared service's ambient cwd (often
+---the home directory). To keep prompts operating on the project Neovim is in,
+---the resolved session is scoped to the current working directory:
+---
+---1. The TUI's current session for this directory (its per-directory tabs).
+---2. The most recently viewed/updated existing session in this directory.
+---3. As a last resort, the most recently viewed/updated session anywhere.
 ---
 ---@return Promise<string>
 function Server:resolve_session_id()
@@ -434,35 +436,30 @@ function Server:resolve_session_id()
     return Promise.resolve(self.session_id)
   end
 
-  local target = Server.panel_targets[self.url]
   local from_tui = self:tui_current_session()
-  if target and from_tui and from_tui == target.id then
-    -- The TUI now shows the panel session; trust it from here on.
-    target.seen = true
-  end
-
-  if target and not target.seen then
-    return Promise.resolve(target.id)
-  end
-
   if from_tui then
     return Promise.resolve(from_tui)
   end
 
-  if target then
-    return Promise.resolve(target.id)
-  end
-
+  local cwd = vim.fn.getcwd()
   return self:get_sessions():next(function(sessions)
-    if #sessions == 0 then
+    local project = {}
+    for _, session in ipairs(sessions) do
+      local directory = session and session.location and session.location.directory
+      if directory == cwd then
+        table.insert(project, session)
+      end
+    end
+    local pool = #project > 0 and project or sessions
+    if #pool == 0 then
       return Promise.reject("No OpenCode sessions found")
     end
-    table.sort(sessions, function(a, b)
+    table.sort(pool, function(a, b)
       local av = (a.time and (a.time.viewed or a.time.updated)) or 0
       local bv = (b.time and (b.time.viewed or b.time.updated)) or 0
       return av > bv
     end)
-    return Promise.resolve(sessions[1].id)
+    return Promise.resolve(pool[1].id)
   end)
 end
 
