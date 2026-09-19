@@ -73,6 +73,10 @@ end
 ---@return Promise<any>
 function M.command(command, server)
   if command == "session.new" then
+    -- TODO: `create_session()` POSTs /api/session, which on the shared service
+    -- always creates the session in the service's ambient cwd (often ~) — the
+    -- same limitation as the retired panel session. Revisit once opencode lets
+    -- the API place a session in a target directory.
     return server:create_session():next(function(created)
       return Promise.resolve(created)
     end)

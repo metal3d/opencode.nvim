@@ -155,6 +155,9 @@ function M.open()
     -- open tabs here, resume the last one instead of opening a fresh session.
     local session_id = require("opencode.util.state").last_tab_session(vim.fn.getcwd())
     if session_id and session_id ~= "" then
+      -- TODO: a tab recorded before the project-directory fix could point at a
+      -- ~ session, and a stale/deleted tab id makes `--session` fail. Consider
+      -- validating that the session still exists and lives in the cwd here.
       vim.cmd("terminal opencode --session " .. session_id)
     else
       vim.cmd("terminal opencode")
