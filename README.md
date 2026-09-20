@@ -8,54 +8,8 @@ plugin's prompts and reviews land in the running session, so they reach whatever
 tab you are looking at. No embedded TUI reimplementation, no legacy `/tui/*`
 endpoints, no Lua dependencies.
 
-> **OpenCode itself is © its authors.** This project targets the OpenCode v2
-> API; see the section below for how it relates to other Neovim integrations.
-
-## Relationship with `nickjvandyke/opencode.nvim`
-
-This plugin is original work and is **not** a fork of
-[nickjvandyke/opencode.nvim](https://github.com/nickjvandyke/opencode.nvim).
-Nick van Dyke's project came first, and it is the reason the author of this one
-started driving OpenCode from Neovim at all. It is mature, widely used, and it
-deserves the success it has. This plugin stands on that work with a lot of
-gratitude — they are not rivals, they are two points of view on the same idea.
-
-### Why a separate plugin?
-
-The two projects share a lot: context expansion, `ask`/`prompt`, events,
-permissions, and a terminal running the real OpenCode. The difference is **the
-integration model**, not the intent.
-
-`nickjvandyke/opencode.nvim` builds on the `snacks.nvim` ecosystem —
-`snacks.input` for prompts, `snacks.picker` for menus, `snacks.terminal` for the
-server. That is a genuine strength, and it is also an opinionated dependency: it
-shapes the whole experience around snacks.
-
-This one takes the opposite bet: **no Lua dependencies**. Prompts use a small
-built-in popup, menus go through `vim.ui.select`, and the terminal is spawned
-directly with `jobstart`. Behaviour stays explicit and easy to reason about, at
-the cost of the polish a shared UI ecosystem provides.
-
-Neither approach is better; they disagree about what a Neovim plugin should
-depend on. This one is the author's own reading of how that integration should
-feel — not a claim that Nick's got it wrong.
-
-### Why not merge the two?
-
-Because the two codebases rest on incompatible foundations — not on a
-disagreement a pull request could settle. `nickjvandyke/opencode.nvim` is
-organised around the snacks input/picker/terminal APIs and their conventions;
-this one deliberately avoids them and ships its own I/O. Reconciling that would
-mean rewriting one of the two, which is exactly what writing a separate plugin
-is.
-
-This is not a replacement and not a fork. If anything, the cleanest outcome
-would have been for both ideas to live in one place — it just isn't possible
-without discarding one of the two foundations, and that is nobody's fault. Each
-project keeps its own path.
-
-> **Using OpenCode V1?** `nickjvandyke/opencode.nvim` is the one you want. This
-> plugin targets the OpenCode v2 API and will not work on V1.
+> **OpenCode itself is © its authors.** See the end of this document for how
+> this plugin relates to other Neovim integrations.
 
 ## Features
 
@@ -330,6 +284,52 @@ tests/                   plenary-based test suite (`make test`)
   opencode/*_spec.lua    specs
 .github/workflows/       CI (tests on Neovim 0.11 / stable / nightly)
 ```
+
+## Relationship with `nickjvandyke/opencode.nvim`
+
+This plugin is original work and is **not** a fork of
+[nickjvandyke/opencode.nvim](https://github.com/nickjvandyke/opencode.nvim).
+Nick van Dyke's project came first, and it is the reason the author of this one
+started driving OpenCode from Neovim at all. It is mature, widely used, and it
+deserves the success it has. This plugin stands on that work with a lot of
+gratitude — they are not rivals, they are two points of view on the same idea.
+
+### Why a separate plugin?
+
+The two projects share a lot: context expansion, `ask`/`prompt`, events,
+permissions, and a terminal running the real OpenCode. The difference is **the
+integration model**, not the intent.
+
+`nickjvandyke/opencode.nvim` builds on the `snacks.nvim` ecosystem —
+`snacks.input` for prompts, `snacks.picker` for menus, `snacks.terminal` for the
+server. That is a genuine strength, and it is also an opinionated dependency: it
+shapes the whole experience around snacks.
+
+This one takes the opposite bet: **no Lua dependencies**. Prompts use a small
+built-in popup, menus go through `vim.ui.select`, and the terminal is spawned
+directly with `jobstart`. Behaviour stays explicit and easy to reason about, at
+the cost of the polish a shared UI ecosystem provides.
+
+Neither approach is better; they disagree about what a Neovim plugin should
+depend on. This one is the author's own reading of how that integration should
+feel — not a claim that Nick's got it wrong.
+
+### Why not merge the two?
+
+Because the two codebases rest on incompatible foundations — not on a
+disagreement a pull request could settle. `nickjvandyke/opencode.nvim` is
+organised around the snacks input/picker/terminal APIs and their conventions;
+this one deliberately avoids them and ships its own I/O. Reconciling that would
+mean rewriting one of the two, which is exactly what writing a separate plugin
+is.
+
+This is not a replacement and not a fork. If anything, the cleanest outcome
+would have been for both ideas to live in one place — it just isn't possible
+without discarding one of the two foundations, and that is nobody's fault. Each
+project keeps its own path.
+
+> **Using OpenCode V1?** `nickjvandyke/opencode.nvim` is the one you want. This
+> plugin targets the OpenCode v2 API and will not work on V1.
 
 ## License
 
