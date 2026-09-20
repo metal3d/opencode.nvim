@@ -8,8 +8,12 @@ plugin's prompts and reviews land in the running session, so they reach whatever
 tab you are looking at. No embedded TUI reimplementation, no legacy `/tui/*`
 endpoints, no Lua dependencies.
 
-> **OpenCode itself is © its authors.** See the end of this document for how
-> this plugin relates to other Neovim integrations.
+> **Using OpenCode V1?** This plugin targets the v2 API and will not work on V1.
+> Use [nickjvandyke/opencode.nvim](https://github.com/nickjvandyke/opencode.nvim)
+> instead.
+>
+> **OpenCode itself is © its authors.** See the end of this document for how this
+> plugin relates to other Neovim integrations.
 
 ## Features
 
@@ -328,8 +332,10 @@ would have been for both ideas to live in one place — it just isn't possible
 without discarding one of the two foundations, and that is nobody's fault. Each
 project keeps its own path.
 
-> **Using OpenCode V1?** `nickjvandyke/opencode.nvim` is the one you want. This
-> plugin targets the OpenCode v2 API and will not work on V1.
+> **Using OpenCode V1?**
+> [nickjvandyke/opencode.nvim](https://github.com/nickjvandyke/opencode.nvim) is
+> the one you want. This plugin targets the OpenCode v2 API and will not work on
+> V1.
 
 ## License
 
