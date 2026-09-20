@@ -3,6 +3,20 @@
 --- OpenCode v2 runs a background service that clients attach to. Its address
 --- and generated password are persisted in `service.json` inside the OpenCode
 --- state directory (`$XDG_STATE_HOME/opencode` or `~/.local/state/opencode`).
+---
+--- Note: this file is an implementation detail of OpenCode, not a documented
+--- public contract, so its location or shape may change between releases. The
+--- alternatives are limited:
+---
+---   - `opencode service status` prints the URL but *not* the password;
+---   - `opencode pair` prints URL, username and password, but as human-oriented
+---     coloured text followed by a QR code, which would mean parsing a display
+---     format;
+---   - `opencode service get` returns `{}` for the connection details.
+---
+--- Reading `service.json` stays the pragmatic choice (structured, no extra
+--- process, no display to parse). If a future release moves it, `opencode pair`
+--- is the fallback to reach for.
 local util = require("opencode.util")
 
 local M = {}
