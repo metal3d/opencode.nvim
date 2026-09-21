@@ -39,6 +39,8 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   running TUI prompt's cursor **without submitting it**, so you can finish the
   sentence before sending. This is the prefill gesture the old plugin got wrong
   by firing the prompt instead.
+- `commit()` / `<leader>ocg` / `:OpencodeCommit`: ask OpenCode to propose a
+  commit plan for the working tree and wait for confirmation before committing.
 
 ### Changed
 

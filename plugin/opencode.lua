@@ -73,6 +73,10 @@ user_cmd("OpencodeAudit", function()
   oc().audit()
 end, { desc = "Audit the current context" })
 
+user_cmd("OpencodeCommit", function()
+  oc().commit()
+end, { desc = "Propose a commit plan" })
+
 user_cmd("OpencodeCommand", function()
   oc().command()
 end, { desc = "Open the OpenCode action palette" })

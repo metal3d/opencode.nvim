@@ -68,6 +68,9 @@ function M.install()
   map("n", p .. "d", function()
     oc.diff()
   end, "session diff")
+  map("n", p .. "g", function()
+    oc.commit()
+  end, "propose a commit")
   register_which_key_group()
 end
 

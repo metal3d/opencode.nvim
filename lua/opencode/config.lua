@@ -70,6 +70,7 @@ local defaults = {
     explain = "Explain @this and its context.",
     document = "Add comments documenting @this.",
     test = "Add tests for @this.",
+    commit = "Propose a commit plan for the current changes and wait for my confirmation before committing.",
   },
   keys = {},
   session = {

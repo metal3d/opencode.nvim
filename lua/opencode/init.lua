@@ -386,6 +386,11 @@ function M.audit()
   run_prompt("audit")
 end
 
+--- Propose a commit plan and wait for confirmation.
+function M.commit()
+  run_prompt("commit")
+end
+
 --- Action/command palette. With no argument it opens a picker; with an action
 --- id it runs that action directly.
 ---@param action string?
@@ -397,6 +402,7 @@ function M.command(action)
     { id = "audit", label = "Audit @this" },
     { id = "fix", label = "Fix @diagnostics" },
     { id = "explain", label = "Explain @this" },
+    { id = "commit", label = "Propose a commit plan" },
     { id = "session", label = "Switch session" },
     { id = "diff", label = "View session diff" },
     { id = "permissions", label = "Pending permissions" },
@@ -428,6 +434,8 @@ function M.command(action)
     return M.fix()
   elseif action == "explain" then
     return M.explain()
+  elseif action == "commit" then
+    return M.commit()
   elseif action == "session" then
     return M.session()
   elseif action == "diff" then

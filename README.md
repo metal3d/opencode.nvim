@@ -112,6 +112,7 @@ require("opencode").setup({
     explain = "Explain @this and its context.",
     document = "Add comments documenting @this.",
     test = "Add tests for @this.",
+    commit = "Propose a commit plan for the current changes and wait for my confirmation before committing.",
   },
   -- Opt into the recommended <leader>oc* set with the string "recommended",
   -- or map an lhs to a function / built-in action id:
@@ -145,6 +146,7 @@ Two ways to bind keys:
 | `<leader>ocs` | switch session |
 | `<leader>occ` | action palette |
 | `<leader>ocd` | session diff |
+| `<leader>ocg` | propose a commit plan |
 
 When [which-key.nvim](https://github.com/folke/which-key.nvim) is installed,
 `keys = "recommended"` also names the shared `<leader>oc` prefix, so the popup
@@ -161,7 +163,7 @@ keys = {
 }
 ```
 
-Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
+Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`, `commit`,
 `session`, `diff`, `permissions`, `compact`, `interrupt`.
 
 ## Usage
@@ -174,6 +176,7 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`,
 | `:OpencodeReview`   | Send "Review @this"                    |
 | `:OpencodeFix`      | Send "Fix @diagnostics"                |
 | `:OpencodeExplain`  | Send "Explain @this"                   |
+| `:OpencodeCommit`   | Propose a commit plan and wait for confirmation |
 | `:OpencodeCommand`  | Open the action palette                |
 | `:OpencodeSession`  | Switch the active session              |
 | `:OpencodePermissions` | Surface pending permissions        |

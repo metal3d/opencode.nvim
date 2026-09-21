@@ -10,7 +10,7 @@ end
 
 describe("opencode.setup", function()
   local plug = "<Plug>(opencode-test-action)"
-  local leader_maps = { ",occ", ",oct", ",oca", ",ocr", ",ocf", ",oce", ",ocu", ",ocs", ",ocd" }
+  local leader_maps = { ",occ", ",oct", ",oca", ",ocr", ",ocf", ",oce", ",ocu", ",ocs", ",ocd", ",ocg" }
 
   after_each(function()
     del(plug)
@@ -47,6 +47,7 @@ describe("opencode.setup", function()
     assert.is_true(vim.fn.maparg(",oca", "x") ~= "")
     assert.is_true(vim.fn.maparg(",ocr", "x") ~= "")
     assert.is_true(vim.fn.maparg(",ocd", "n") ~= "")
+    assert.is_true(vim.fn.maparg(",ocg", "n") ~= "") -- propose a commit
   end)
 
   it("names the <leader>oc prefix as a which-key group", function()
@@ -68,6 +69,23 @@ describe("opencode.setup", function()
     assert.has_no.errors(function()
       oc.setup({ keys = "recommended" })
     end)
+  end)
+end)
+
+describe("opencode.commit", function()
+  it("ships a default commit prompt", function()
+    assert.is_truthy(config.defaults.prompts.commit)
+  end)
+
+  it("routes the commit action to commit()", function()
+    local real = oc.commit
+    local called = false
+    oc.commit = function()
+      called = true
+    end
+    oc.command("commit")
+    oc.commit = real
+    assert.is_true(called)
   end)
 end)
 
