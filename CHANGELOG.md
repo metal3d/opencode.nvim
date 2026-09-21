@@ -29,6 +29,9 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Plenary-based test suite (`make test`) and a GitHub Actions workflow running
   it against Neovim 0.11, stable and nightly.
 - Recommended `<leader>oc*` keymaps, opt-in through `opts.keys = "recommended"`.
+- which-key integration: the recommended set names its `<leader>oc` prefix so the
+  popup shows `+opencode` (which-key v3), and is a no-op when which-key is
+  absent.
 - A README section documenting the relationship with
   `nickjvandyke/opencode.nvim`: same idea, different integration model (snacks
   ecosystem vs no dependencies), and why the two cannot be merged.

@@ -146,6 +146,11 @@ Two ways to bind keys:
 | `<leader>occ` | action palette |
 | `<leader>ocd` | session diff |
 
+When [which-key.nvim](https://github.com/folke/which-key.nvim) is installed,
+`keys = "recommended"` also names the shared `<leader>oc` prefix, so the popup
+shows `+opencode` for `c` instead of leaving it unlabelled. This is a no-op when
+which-key is absent (or older than v3, which introduced `add`).
+
 **Custom set** — `keys` maps a left-hand side to a Lua function or a built-in
 action id (invoked as `require("opencode").command(id)`):
 

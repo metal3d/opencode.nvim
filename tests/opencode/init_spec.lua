@@ -21,6 +21,7 @@ describe("opencode.setup", function()
     vim.g.opencode_opts = nil
     config.opts = nil
     config.user = nil
+    package.loaded["which-key"] = nil
   end)
 
   it("resolves options through config.get()", function()
@@ -46,6 +47,27 @@ describe("opencode.setup", function()
     assert.is_true(vim.fn.maparg(",oca", "x") ~= "")
     assert.is_true(vim.fn.maparg(",ocr", "x") ~= "")
     assert.is_true(vim.fn.maparg(",ocd", "n") ~= "")
+  end)
+
+  it("names the <leader>oc prefix as a which-key group", function()
+    vim.g.mapleader = ","
+    local specs = {}
+    package.loaded["which-key"] = {
+      add = function(spec)
+        specs[#specs + 1] = spec
+      end,
+    }
+    oc.setup({ keys = "recommended" })
+    assert.are.equal("<leader>oc", specs[1][1][1])
+    assert.are.equal("opencode", specs[1][1].group)
+  end)
+
+  it("leaves which-key untouched when it is not installed", function()
+    vim.g.mapleader = ","
+    package.loaded["which-key"] = nil
+    assert.has_no.errors(function()
+      oc.setup({ keys = "recommended" })
+    end)
   end)
 end)
 
