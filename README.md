@@ -64,10 +64,12 @@ require("opencode").setup({
 ```
 
 With [lazy.nvim](https://github.com/folke/lazy.nvim), pass the options through
-`opts`: lazy.nvim calls `require("opencode").setup(opts)` for you.
+`opts`: lazy.nvim calls `require("opencode").setup(opts)` for you. Drop this in
+`~/.config/nvim/lua/plugins/opencode.lua` — files under `lua/plugins/` are Lua
+modules, so they must *return* the spec:
 
 ```lua
-{
+return {
   "metal3d/opencode.nvim",
   event = "VeryLazy",
   ---@type opencode.Opts
@@ -77,6 +79,10 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim), pass the options through
   },
 }
 ```
+
+If you embed the spec inline in an existing list (for example inside the
+`plugins` table of your lazy.nvim setup), just drop the leading `return` —
+lazy.nvim accepts the plain `{ ... }` table there.
 
 If a spec also provides a `config` function, lazy.nvim no longer calls
 `setup()` automatically — call it yourself inside `config`:
