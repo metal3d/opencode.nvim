@@ -77,7 +77,9 @@ describe("panel.open", function()
     assert.is_true((vim.bo[panel.buf].channel or 0) > 0)
 
     vim.wait(3000, function()
-      return vim.fn.filereadable(args_file) == 1
+      -- The shell creates the file before `printf` writes to it: wait for the
+      -- content, not just the file, or the read can race an empty file.
+      return vim.fn.filereadable(args_file) == 1 and #vim.fn.readfile(args_file) > 0
     end)
     assert.are.equal(1, vim.fn.filereadable(args_file))
     assert.are.same({ "--session", "ses_x; touch pwned && $(echo nope)" }, vim.fn.readfile(args_file))
@@ -131,7 +133,9 @@ describe("panel.open", function()
     panel.open()
 
     assert.is_true(vim.wait(3000, function()
-      return vim.fn.filereadable(out_file) == 1
+      -- The redirect creates the file before `printenv` writes to it: wait for
+      -- the content, not just the file, or the read can race an empty file.
+      return vim.fn.filereadable(out_file) == 1 and #vim.fn.readfile(out_file) > 0
     end))
     assert.are.same({ "truecolor" }, vim.fn.readfile(out_file))
     vim.env.COLORTERM = real_colorterm
@@ -152,7 +156,9 @@ describe("panel.open", function()
     panel.open()
 
     assert.is_true(vim.wait(3000, function()
-      return vim.fn.filereadable(out_file) == 1
+      -- The redirect creates the file before `printenv` writes to it: wait for
+      -- the content, not just the file, or the read can race an empty file.
+      return vim.fn.filereadable(out_file) == 1 and #vim.fn.readfile(out_file) > 0
     end))
     assert.are.same({ "truecolor" }, vim.fn.readfile(out_file))
     vim.env.COLORTERM = real_colorterm
