@@ -67,6 +67,74 @@ local function build_env()
   return { COLORTERM = colorterm }
 end
 
+--- Enter Terminal mode so typed keys reach the app without pressing `i`.
+---
+--- For a terminal buffer, `:startinsert` is documented to enter *Terminal-mode*
+--- (the mode that forwards keys to the job), so the panel is immediately
+--- typeable. Scoped to the panel's own buffer and gated by `panel.insert`, so
+--- nothing changes for other buffers or terminals.
+local function enter_terminal_mode()
+  if config.get().panel.insert == false then
+    return
+  end
+  if M.buf and vim.api.nvim_get_current_buf() == M.buf then
+    vim.cmd("startinsert")
+  end
+end
+
+--- Apply the configured buffer-local Terminal-mode mappings to `buf`.
+---
+--- Terminal mode forwards every key to the job except `<C-\>`, so Neovim never
+--- sees keys such as `<C-w>` unless we intercept them. The default rewrites
+--- `<C-w>` as:
+---
+---     <C-\><C-n>   leave Terminal mode (Neovim's native escape)
+---     <C-w>        start the usual Normal-mode window prefix
+---
+--- so `<C-w><arrow>` — or `<C-w>h/j/k/l`, `<C-w>s`, … — navigates windows in a
+--- single gesture, exactly like any other buffer. A raw `<C-w>` can still be
+--- sent to the app with `<C-\><C-w>` (the `<C-\>` prefix forwards the next key).
+---
+--- `{ buffer = buf }` keeps every mapping on the panel's terminal buffer alone:
+--- no global `tnoremap`, so other terminals and plugins keep their own maps.
+---@param buf integer
+local function apply_terminal_keys(buf)
+  local keys = config.get().panel.terminal_keys
+  if type(keys) ~= "table" then
+    return
+  end
+  for lhs, rhs in pairs(keys) do
+    if type(rhs) == "string" or type(rhs) == "function" then
+      vim.keymap.set("t", lhs, rhs, { buffer = buf, desc = "opencode: terminal key" })
+    end
+  end
+end
+
+--- Install the panel terminal's buffer-local behaviour: its mappings and the
+--- auto-insert on focus. Called once, when the terminal buffer is created.
+---
+--- The `BufEnter` autocmd (buffer-local) re-enters Terminal mode whenever the
+--- panel regains focus by hand (e.g. `<C-w>w`). It defers through
+--- `vim.schedule` because a `startinsert` fired in the middle of the
+--- buffer/window switch can be undone by that very switch.
+---@param buf integer
+local function setup_terminal_buffer(buf)
+  apply_terminal_keys(buf)
+  vim.api.nvim_create_autocmd("BufEnter", {
+    buffer = buf,
+    desc = "opencode: enter Terminal mode when the panel gains focus",
+    callback = function()
+      -- Deferred: `startinsert` right inside BufEnter can be undone by the
+      -- surrounding buffer/window switch.
+      vim.schedule(function()
+        if vim.api.nvim_get_current_buf() == buf then
+          enter_terminal_mode()
+        end
+      end)
+    end,
+  })
+end
+
 --- Open the panel (or focus it when already open).
 ---@return boolean spawned # Whether a new terminal instance was started.
 function M.open()
@@ -116,6 +184,7 @@ function M.open()
     end
     M.buf = vim.api.nvim_get_current_buf()
     M.session = target
+    setup_terminal_buffer(M.buf)
     spawned = true
   end
 
@@ -124,6 +193,7 @@ function M.open()
   vim.wo[win].relativenumber = false
   vim.wo[win].signcolumn = "no"
   vim.api.nvim_set_current_win(win)
+  enter_terminal_mode()
   return spawned
 end
 
@@ -223,6 +293,7 @@ end
 function M.focus()
   if M.is_open() then
     vim.api.nvim_set_current_win(M.win)
+    enter_terminal_mode()
   end
 end
 

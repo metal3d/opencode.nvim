@@ -1,5 +1,29 @@
 local panel = require("opencode.panel")
 local session = require("opencode.session")
+local config = require("opencode.config")
+
+--- Look up a Terminal-mode mapping on a specific buffer.
+---@param buf integer
+---@param lhs string Lowercased lhs to match.
+---@return table?
+local function buffer_terminal_map(buf, lhs)
+  for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "t")) do
+    if m.lhs:lower() == lhs then
+      return m
+    end
+  end
+end
+
+--- Look up a *global* Terminal-mode mapping.
+---@param lhs string Lowercased lhs to match.
+---@return table?
+local function global_terminal_map(lhs)
+  for _, m in ipairs(vim.api.nvim_get_keymap("t")) do
+    if m.lhs:lower() == lhs then
+      return m
+    end
+  end
+end
 
 describe("panel.open", function()
   local tmp
@@ -148,6 +172,59 @@ describe("panel.open", function()
     vim.notify = real_notify
     assert.is_false(spawned)
     assert.is_truthy(notified and notified:find("could not start", 1, true))
+  end)
+
+  it("maps <C-w> buffer-locally, leaving other terminals untouched", function()
+    fake_opencode()
+    panel.open()
+
+    local m = buffer_terminal_map(panel.buf, "<c-w>")
+    assert.is_truthy(m, "expected a buffer-local <C-w> mapping in the panel")
+    -- Leaves Terminal mode, then starts the usual window prefix.
+    assert.are.equal("<c-\\><c-n><c-w>", m.rhs:lower())
+    -- Buffer-local only: no global terminal mapping leaks to other plugins.
+    assert.is_nil(global_terminal_map("<c-w>"), "must not install a global terminal mapping")
+  end)
+
+  it("enters Terminal mode when the panel opens", function()
+    fake_opencode()
+    local real_cmd = vim.cmd
+    local started = false
+    vim.cmd = function(...)
+      for _, v in ipairs({ ... }) do
+        if type(v) == "string" and v:find("startinsert", 1, true) then
+          started = true
+        end
+      end
+      return real_cmd(...)
+    end
+    local ok, err = pcall(panel.open)
+    vim.cmd = real_cmd
+    assert.is_true(ok, err)
+    assert.is_true(started)
+  end)
+
+  it("skips Terminal mode when panel.insert is false", function()
+    fake_opencode()
+    local real_user = config.user
+    config.setup({ panel = { insert = false } })
+
+    local real_cmd = vim.cmd
+    local started = false
+    vim.cmd = function(...)
+      for _, v in ipairs({ ... }) do
+        if type(v) == "string" and v:find("startinsert", 1, true) then
+          started = true
+        end
+      end
+      return real_cmd(...)
+    end
+    local ok, err = pcall(panel.open)
+    vim.cmd = real_cmd
+    config.setup(real_user)
+
+    assert.is_true(ok, err)
+    assert.is_false(started)
   end)
 end)
 

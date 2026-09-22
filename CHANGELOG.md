@@ -41,6 +41,11 @@ Versioning is [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by firing the prompt instead.
 - `commit()` / `<leader>ocg` / `:OpencodeCommit`: ask OpenCode to propose a
   commit plan for the working tree and wait for confirmation before committing.
+- Panel usability: focusing the panel enters Terminal mode automatically
+  (`panel.insert`), and `<C-w>` is mapped **buffer-locally** to the window
+  prefix so `<C-w><arrow>` navigates windows from Terminal mode without leaving
+  it. The mappings apply to the panel only (configurable via
+  `panel.terminal_keys`), never to other terminals or plugins.
 
 ### Changed
 

@@ -18,6 +18,8 @@ local util = require("opencode.util")
 ---@field size? integer Panel width in columns; nil uses the natural split width.
 ---@field position "left"|"right" Which edge the panel is attached to.
 ---@field open "session"|"home"|"mini"|"continue" How the app is launched.
+---@field insert? boolean Enter Terminal mode when the panel gains focus (default true).
+---@field terminal_keys? table<string, string|fun()>|false Buffer-local Terminal-mode mappings.
 
 ---@class opencode.session.Opts
 ---@field mode "recent"|"new" Adopt the latest session, or always create one.
@@ -60,6 +62,19 @@ local defaults = {
     --   "mini"     → minimal interface (much less chrome), into the session
     --   "continue" → full TUI, continue the last session
     open = "session",
+    -- Enter Terminal mode as soon as the panel gains focus, so keys reach the
+    -- app without pressing `i` first.
+    insert = true,
+    -- Buffer-local Terminal-mode mappings for the panel only. The default turns
+    -- <C-w> into the usual window prefix, so <C-w><arrow> navigates windows
+    -- from Terminal mode like any other buffer: it rewrites <C-w> as
+    -- `<C-\><C-n><C-w>` (leave Terminal mode, then start the window prefix).
+    -- A raw <C-w> still reaches the app with <C-\><C-w>. Add your own entries,
+    -- or set a key to `false` to drop it; set the whole option to `false` to
+    -- disable.
+    terminal_keys = {
+      ["<C-w>"] = "<C-\\><C-n><C-w>",
+    },
   },
   prompts = {
     -- Prompt templates. `@context` placeholders are expanded into location

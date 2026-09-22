@@ -105,6 +105,10 @@ require("opencode").setup({
                       -- "home" default dashboard;
                       -- "mini" minimal interface (least chrome);
                       -- "continue" full TUI, last session
+    insert = true,   -- enter Terminal mode when the panel gains focus
+    -- Buffer-local Terminal-mode mappings for the panel only. Default maps
+    -- <C-w> to the window prefix so <C-w><arrow> works from Terminal mode.
+    terminal_keys = { ["<C-w>"] = "<C-\\><C-n><C-w>" },
   },
   prompts = {
     review = "Review @this for correctness and readability.",
@@ -182,6 +186,30 @@ Valid action ids: `toggle`, `ask`, `review`, `audit`, `fix`, `explain`, `commit`
 | `:OpencodePermissions` | Surface pending permissions        |
 | `:OpencodeDiff`     | View the session diff                  |
 | `:checkhealth opencode` | Run the health check              |
+
+### Using the panel
+
+The panel is a real Neovim terminal running the `opencode` TUI, so it has its own
+Terminal mode:
+
+- **Typing works immediately.** Focusing the panel enters Terminal mode for you
+  (`panel.insert`), so there is no `i` to press first.
+- **`<C-w><arrow>` navigates windows** like in any other buffer. `<C-w>` is
+  mapped buffer-locally to the usual window prefix, so it only affects the
+  panel's terminal — never other terminals or plugins. A raw `<C-w>` still
+  reaches OpenCode with `<C-\><C-w>`.
+- **`<Esc>` stays with OpenCode** (it interrupts the running LLM). Neovim's own
+  "leave Terminal mode" is therefore `<C-\><C-n>`; you can bind something easier
+  through `panel.terminal_keys`:
+
+  ```lua
+  require("opencode").setup({
+    panel = { terminal_keys = { ["<C-q>"] = "<C-\\><C-n>" } },
+  })
+  ```
+
+> On an AZERTY keyboard, the key labelled `<C-\>` often sends `<C-_>`, which
+> LazyVim maps to its own floating terminal. That is unrelated to this plugin.
 
 ### API (`require("opencode")`)
 
