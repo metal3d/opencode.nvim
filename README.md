@@ -119,6 +119,7 @@ require("opencode").setup({
   },
   prompts = {
     review = "Review @this for correctness and readability.",
+    audit = "Audit @this for bugs, edge cases and security issues.",
     fix = "Fix @diagnostics",
     explain = "Explain @this and its context.",
     document = "Add comments documenting @this.",
