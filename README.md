@@ -1,5 +1,12 @@
 # opencode.nvim
 
+<p align="center">
+  <a href="https://github.com/metal3d/opencode.nvim/actions/workflows/test.yml"><img src="https://github.com/metal3d/opencode.nvim/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/metal3d/opencode.nvim/actions/workflows/lint.yml"><img src="https://github.com/metal3d/opencode.nvim/actions/workflows/lint.yml/badge.svg" alt="Lint"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://neovim.io"><img src="https://img.shields.io/badge/Neovim-%E2%89%A5%200.11-57A143?logo=neovim&logoColor=white" alt="Neovim ≥ 0.11"></a>
+</p>
+
 A Neovim plugin that opens the **real [OpenCode](https://opencode.ai/) application**
 in a side terminal and drives it over OpenCode's **v2 HTTP API** (REST + SSE).
 
