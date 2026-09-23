@@ -17,7 +17,7 @@ endpoints, no Lua dependencies.
 
 > **Using OpenCode V1?** This plugin targets the v2 API and will not work on V1.
 > Use [nickjvandyke/opencode.nvim](https://github.com/nickjvandyke/opencode.nvim)
-> instead.
+> instead — it supports v2 on its `main` branch.
 >
 > **OpenCode itself is © its authors.** See the end of this document for how this
 > plugin relates to other Neovim integrations.
@@ -208,10 +208,11 @@ Terminal mode:
 
 - **Typing works immediately.** Focusing the panel enters Terminal mode for you
   (`panel.insert`), so there is no `i` to press first.
-- **`<C-w><arrow>` navigates windows** like in any other buffer. `<C-w>` is
-  mapped buffer-locally to the usual window prefix, so it only affects the
-  panel's terminal — never other terminals or plugins. A raw `<C-w>` still
-  reaches OpenCode with `<C-\><C-w>`.
+- **The usual `<C-w>` prefix works**, so `<C-w><arrow>`, `<C-w>w`, `<C-w>h/j/k/l`,
+  `<C-w>s`… take you to other windows and buffers exactly like in any other
+  buffer. `<C-w>` is remapped buffer-locally, so it only affects the panel's
+  terminal — never other terminals or plugins. A raw `<C-w>` still reaches
+  OpenCode with `<C-\><C-w>`.
 - **`<Esc>` stays with OpenCode** (it interrupts the running LLM). Neovim's own
   "leave Terminal mode" is therefore `<C-\><C-n>`; you can bind something easier
   through `panel.terminal_keys`:
@@ -293,15 +294,14 @@ service with `opencode service start`.
 
 ### Targeting the active tab
 
-OpenCode exposes **no API for the TUI's active tab**, and the legacy `/tui/*`
-control endpoints are absent from OpenCode v2.0.x. So instead of sending prompts
-through the HTTP API (which targets one specific session), the plugin **injects
-them into the running TUI's terminal**. The text is written to the terminal pty
-and submitted, so it always lands in the **tab the user is looking at**.
+OpenCode exposes **no API for the TUI's active tab**, and several tabs — each
+with its own session — can be open on the same project. The API can only target
+a session id: `/api/session/active` lists sessions that are *processing*, not the
+one you are looking at. So the plugin **types prompts into the running TUI** and
+submits them there, so they always land in the **active OpenCode tab**.
 
-If no local TUI terminal is available, it falls back to `/tui/append-prompt`
-(when the server exposes it) and finally to the v2 API targeting the session the
-plugin owns (`session.mode`).
+If no local TUI terminal is available, it falls back to the v2 API targeting the
+session the plugin owns (`session.mode`).
 
 ### Reloading edits
 
@@ -350,32 +350,52 @@ gratitude — they are not rivals, they are two points of view on the same idea.
 
 ### Why a separate plugin?
 
-The two projects share a lot: context expansion, `ask`/`prompt`, events,
-permissions, and a terminal running the real OpenCode. The difference is **the
-integration model**, not the intent.
+The two projects share a lot — context expansion, `ask`/`prompt`, events,
+permissions, the v2 HTTP API, and a terminal running the real OpenCode. They
+differ in **how a prompt is delivered**, and that one choice shapes the rest.
 
-`nickjvandyke/opencode.nvim` builds on the `snacks.nvim` ecosystem —
-`snacks.input` for prompts, `snacks.picker` for menus, `snacks.terminal` for the
-server. That is a genuine strength, and it is also an opinionated dependency: it
-shapes the whole experience around snacks.
+`nickjvandyke/opencode.nvim` sends prompts through the HTTP API, which targets a
+session. This one types them into the running TUI, so they land in the **active
+OpenCode tab** — the one you are looking at. That matters when several tabs
+(hence several sessions) are open for the same project: the API has no notion of
+the focused tab, while the TUI does. It is also what makes `append()` possible,
+pre-filling a prompt without submitting it, which the v2 API cannot do since it
+processes whatever it receives.
 
-This one takes the opposite bet: **no Lua dependencies**. Prompts use a small
-built-in popup, menus go through `vim.ui.select`, and the terminal is spawned
-directly with `jobstart`. Behaviour stays explicit and easy to reason about, at
-the cost of the polish a shared UI ecosystem provides.
+#### At a glance
 
-Neither approach is better; they disagree about what a Neovim plugin should
-depend on. This one is the author's own reading of how that integration should
+Neither project is a subset of the other; they simply make different bets.
+
+| | [`nickjvandyke/opencode.nvim`](https://github.com/nickjvandyke/opencode.nvim) | this plugin |
+| --- | --- | --- |
+| Integration model | real OpenCode TUI, driven over the HTTP API | real OpenCode TUI, driven by typing into it |
+| Prompt delivery | HTTP API, targeting a session | typed into the running TUI, targeting the active OpenCode tab |
+| Pre-fill without sending | not offered | `append()` |
+| Side terminal | delegated to your own `server.start` (default `term://opencode`; snacks.terminal, etc. are examples) | built in: position, size, open mode, auto Terminal mode, full `<C-w>` window prefix |
+| Server | any local or remote server via `server.url` (string or function) | discovered local service, or an explicit `server.url`; connecting to other servers is planned |
+| Contexts | `@this` `@buffer` `@buffers` `@diagnostics` `@marks` `@quickfix` `@visible` | `@this` `@selection` `@buffer` `@buffers` `@file` `@diagnostics` |
+| Named prompts | diagnostics, document, explain, fix, implement, optimize, review, test | review, audit, fix, explain, document, test, commit |
+| Diagnostics | `@diagnostics` context + `fix` prompt | `@diagnostics` context + `fix` prompt |
+| OpenCode commands | runs registered commands | action palette |
+| Edit review | side-by-side `diffpatch`, accept/reject whole or per hunk | read-only session diff preview |
+| Ask input | `vim.ui.input`, optional snacks enhancements | built-in floating popup |
+| Menus | `vim.ui.select`, optional snacks.picker | `vim.ui.select` |
+| Events | `OpencodeEvent:*` autocmds | same, filtered to the current directory |
+| Required Lua dependencies | none (snacks optional) | none |
+| OpenCode version | v2 on `main`; latest release targets v1 | v2 |
+
+Neither approach is better; they make different trade-offs around targeting and
+control. This one is the author's own reading of how that integration should
 feel — not a claim that Nick's got it wrong.
 
 ### Why not merge the two?
 
-Because the two codebases rest on incompatible foundations — not on a
-disagreement a pull request could settle. `nickjvandyke/opencode.nvim` is
-organised around the snacks input/picker/terminal APIs and their conventions;
-this one deliberately avoids them and ships its own I/O. Reconciling that would
-mean rewriting one of the two, which is exactly what writing a separate plugin
-is.
+Because the two codebases make incompatible bets about how a prompt reaches
+OpenCode. `nickjvandyke/opencode.nvim` delivers it through the HTTP API, which
+targets a session; this one types it into the running TUI, which targets the
+**active OpenCode tab** and keeps the pre-fill (`append`) behaviour the API
+cannot provide. Reconciling both would mean rewriting one of the two, which is
+exactly what writing a separate plugin is.
 
 This is not a replacement and not a fork. If anything, the cleanest outcome
 would have been for both ideas to live in one place — it just isn't possible
@@ -385,7 +405,7 @@ project keeps its own path.
 > **Using OpenCode V1?**
 > [nickjvandyke/opencode.nvim](https://github.com/nickjvandyke/opencode.nvim) is
 > the one you want. This plugin targets the OpenCode v2 API and will not work on
-> V1.
+> V1. Nick's plugin supports v2 on its `main` branch too.
 
 ## License
 
